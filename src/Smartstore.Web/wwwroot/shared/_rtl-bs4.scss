@@ -56,18 +56,6 @@
 		}
 	}
 
-	.dropdown-menu:not(.colorpicker) {
-/*		left: initial !important;
-		right: 0;
-		text-align: right;
-
-        &.dropdown-menu-right,
-		&.dropdown-menu-left {
-			right: auto;
-			left: 0 !important;
-        }*/
-	}
-
 	.list-unstyled,
 	.list-inline {
 		padding-right: 0;
@@ -85,14 +73,6 @@
 
 	// Button Groups
 	// ----------------------------------------------
-
-/*	.btn + .btn,
-	.btn + .btn-group,
-	.btn-group + .btn,
-	.btn-group + .btn-group {
-		margin-right: -$btn-border-width;
-		margin-left: initial;
-	}*/
 
 	.btn-group {
 		> .btn:first-child {
@@ -112,26 +92,6 @@
 
 	// Custom controls
 	// ----------------------------------------------
-	.custom-control {
-	    padding-right: $custom-control-gutter;
-	    padding-left: 0;
-	}
-	.custom-control-inline {
-	    margin-left: $custom-control-spacer-x;
-	    margin-right: 0;
-	}
-	.custom-control-label {
-        padding-right: $custom-control-indicator-size * 1.5;
-		&::before {
-			right: 0;
-			left: initial;
-		}
-
-		&::after {
-			right: 0;
-			left: initial;
-		}
-	}
 
 	.custom-select {
 	  &[multiple],
@@ -232,11 +192,6 @@
 			margin-left: .25rem;
 			margin-right: initial;
 		}
-	}
-
-	.dropdown-toggle:after {
-		margin-right: $caret-width * .85;
-		margin-left: 0;
 	}
 
 	.form-check {

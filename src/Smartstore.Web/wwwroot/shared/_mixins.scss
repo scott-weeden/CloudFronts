@@ -37,11 +37,13 @@
 
     @if $direction == "right" {
         $elemAlignment: "left";
-    } @else if $direction == "top" {
+    } 
+    @else if $direction == "top" {
         $elemAlignment: "bottom";
         $firstBorder: "left";
         $secondBorder: "right";
-    } @else if $direction == "bottom" {
+    } 
+    @else if $direction == "bottom" {
         $elemAlignment: "top";
         $firstBorder: "left";
         $secondBorder: "right";
@@ -62,10 +64,12 @@
 
         @if $alignment == "near" {
             #{$firstBorder}: $offset;
-        } @else if $alignment == "center" {
+        } 
+        @else if $alignment == "center" {
             #{$firstBorder}: 50%;
             margin-#{$firstBorder}: -#{$size + 1}px;
-        } @else if $alignment == "far" {
+        } 
+        @else if $alignment == "far" {
             #{$secondBorder}: $offset;
         }
     }
@@ -161,6 +165,19 @@
     font-size: $font-size-sm !important;
 }
 
+@mixin button-flat() {
+    --btn-color: #{$yiq-text-dark};
+    --btn-bg: transparent;
+    --btn-border-color: transparent;
+    --btn-box-shadow: none;
+    --btn-disabled-color: var(--btn-color);
+    --btn-disabled-bg: var(--btn-bg);
+    --btn-disabled-border-color: var(--btn-border-color);
+
+    border-radius: var(--btn-border-radius) !important;
+    background-image: none;
+}
+
 
 // Functions
 // ===============================================
@@ -229,4 +246,12 @@ $scrim-gradient-coords: (
 	@else {
 		@return $text-light;
 	}
+}
+
+@function cssmin($expr1, $expr2) {
+    @return #{unquote("min(#{$expr1}, #{$expr2})")};
+}
+
+@function cssmax($expr1, $expr2) {
+    @return #{unquote("max(#{$expr1}, #{$expr2})")};
 }

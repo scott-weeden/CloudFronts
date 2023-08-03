@@ -18,7 +18,7 @@
                     <div class="d-flex flex-wrap justify-content-center">
                         @foreach (var link in Model.SocialLinks)
                         {
-                            <a href="@link.Href" target="_blank" class="btn btn-circle btn-flat btn-social btn-brand-@link.CssClass" title="@link.DisplayName">
+                            <a href="@link.Href" target="_blank" class="btn btn-icon rounded-circle btn-flat btn-social btn-brand-@link.CssClass" title="@link.DisplayName">
                                 <i class="fab fa-@link.CssClass"></i>
                             </a>
                         }
@@ -89,7 +89,7 @@
                                     </div>
 
                                     <div class="d-none d-lg-block">
-                                        <div class="form-inline">
+                                        <div class="hstack">
                                             <div class="form-check form-check-inline">
                                                 <input class="form-check-input" type="radio" id="newsletter-subscribe" value="newsletter-subscribe" name="optionsRadios" checked="checked">
                                                 <label class="form-check-label" for="newsletter-subscribe">
