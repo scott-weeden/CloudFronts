@@ -13,7 +13,7 @@ namespace Smartstore.Core.Identity
         public TrackActivityAttribute()
             : base(typeof(TrackActivityFilter))
         {
-            Arguments = new object[] { this };
+            Arguments = [this];
         }
 
         /// <summary>
@@ -118,8 +118,8 @@ namespace Smartstore.Core.Identity
                 var currentUrl = _webHelper.GetCurrentPageUrl(true);
                 if (currentUrl.HasValue())
                 {
-                    dirty = dirty || customer.GenericAttributes.LastVisitedPage != currentUrl;
-                    customer.GenericAttributes.LastVisitedPage = currentUrl;
+                    dirty = dirty || customer.LastVisitedPage != currentUrl;
+                    customer.LastVisitedPage = currentUrl;
                 }
             }
 

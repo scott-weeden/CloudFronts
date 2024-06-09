@@ -37,6 +37,9 @@ namespace Smartstore.Core.Data.Migrations
         /// </summary>
         private IMigrationInfo _lastSuccessfulMigration;
 
+        // Value is migration version
+        private readonly static List<long> _pendingSeeders = [];
+
         public DbMigrator(
             TContext db,
             SmartDbContext dbCore,
@@ -51,8 +54,8 @@ namespace Smartstore.Core.Data.Migrations
             ILogger<DbMigrator<TContext>> logger)
             : base(scope, migrationTable)
         {
-            Guard.NotNull(db, nameof(db));
-            Guard.NotNull(dbCore, nameof(dbCore));
+            Guard.NotNull(db);
+            Guard.NotNull(dbCore);
 
             _db = db;
             _dbCore = dbCore;
@@ -65,6 +68,8 @@ namespace Smartstore.Core.Data.Migrations
             _logger = logger;
         }
 
+        private bool IsCoreMigration => _db is SmartDbContext;
+
         /// <inheritdoc/>
         public override TContext Context => _db;
 
@@ -74,9 +79,7 @@ namespace Smartstore.Core.Data.Migrations
 
         /// <inheritdoc/>
         public override Task<int> RunPendingMigrationsAsync(Assembly assembly = null, CancellationToken cancelToken = default)
-        {
-            return MigrateAsync(null, assembly, cancelToken);
-        }
+            => MigrateAsync(null, assembly, cancelToken);
 
         /// <inheritdoc/>
         public override async Task<int> MigrateAsync(long? targetVersion = null, Assembly assembly = null, CancellationToken cancelToken = default)
@@ -136,11 +139,7 @@ namespace Smartstore.Core.Data.Migrations
                 return 0;
             }
 
-            var migrations =
-                from v in versions
-                let descriptor = MigrationTable.GetMigrationByVersion(v)
-                let instance = CreateMigration(descriptor.Type)
-                select _migrationRunnerConventions.GetMigrationInfoForMigration(instance);
+            var migrations = GetMigrationInfosForVersions(versions);
 
             if (!down)
             {
@@ -159,7 +158,6 @@ namespace Smartstore.Core.Data.Migrations
 
         protected virtual async Task<int> MigrateUpAsync(IMigrationInfo[] migrations, CancellationToken cancelToken)
         {
-            var isCoreMigration = _db is SmartDbContext;
             var coreSeeders = new List<SeederEntry>();
             var externalSeeders = new List<SeederEntry>();
 
@@ -169,12 +167,26 @@ namespace Smartstore.Core.Data.Migrations
                 // (e.g. for Resource or Setting updates even from external modules).
                 if (migration.Migration is IDataSeeder<SmartDbContext> coreSeeder)
                 {
-                    coreSeeders.Add(new SeederEntry { Seeder = coreSeeder, Migration = migration, PreviousMigration = _lastSuccessfulMigration });
+                    if (coreSeeder.Stage == DataSeederStage.Early)
+                    {
+                        coreSeeders.Add(new SeederEntry { Seeder = coreSeeder, Migration = migration, PreviousMigration = _lastSuccessfulMigration });
+                    }
+                    else
+                    {
+                        _pendingSeeders.Add(migration.Version);
+                    }
                 }
 
-                if (!isCoreMigration && migration.Migration is IDataSeeder<TContext> externalSeeder)
+                if (!IsCoreMigration && migration.Migration is IDataSeeder<TContext> externalSeeder)
                 {
-                    externalSeeders.Add(new SeederEntry { Seeder = externalSeeder, Migration = migration, PreviousMigration = _lastSuccessfulMigration });
+                    if (externalSeeder.Stage == DataSeederStage.Early)
+                    {
+                        externalSeeders.Add(new SeederEntry { Seeder = externalSeeder, Migration = migration, PreviousMigration = _lastSuccessfulMigration });
+                    }
+                    else
+                    {
+                        _pendingSeeders.Add(migration.Version);
+                    }
                 }
             }
 
@@ -185,11 +197,14 @@ namespace Smartstore.Core.Data.Migrations
             if (coreSeeders.Any())
             {
                 // Apply core data seeders first,
-                await RunSeedersAsync(coreSeeders, _dbCore, cancelToken);
+                await RunEarlySeedersAsync(coreSeeders, _dbCore, cancelToken);
             }
 
-            // Apply external data seeders.
-            await RunSeedersAsync(externalSeeders, _db, cancelToken);
+            if (externalSeeders.Any())
+            {
+                // Apply external data seeders.
+                await RunEarlySeedersAsync(externalSeeders, _db, cancelToken);
+            }
 
             return succeeded;
         }
@@ -257,10 +272,8 @@ namespace Smartstore.Core.Data.Migrations
             return succeeded;
         }
 
-        protected virtual async Task RunSeedersAsync<T>(IEnumerable<SeederEntry> seederEntries, T ctx, CancellationToken cancelToken = default) where T : HookingDbContext
+        protected virtual async Task RunEarlySeedersAsync<T>(IEnumerable<SeederEntry> seederEntries, T ctx, CancellationToken cancelToken = default) where T : HookingDbContext
         {
-            var runner = (MigrationRunner)_migrationRunner;
-
             foreach (var entry in seederEntries)
             {
                 if (cancelToken.IsCancellationRequested)
@@ -268,33 +281,16 @@ namespace Smartstore.Core.Data.Migrations
                     break;
                 }
 
-                var m = entry.Migration;
-                var seeder = (IDataSeeder<T>)entry.Seeder;
-
                 try
                 {
-                    // Pre seed event.
-                    await _eventPublisher.PublishAsync(new SeedingDbMigrationEvent
-                    {
-                        MigrationVersion = m.Version,
-                        MigrationDescription = m.Description,
-                        DbContext = ctx
-                    }, cancelToken);
-
-                    // Seed.
-                    await seeder.SeedAsync(ctx, cancelToken);
-
-                    // Post seed event.
-                    await _eventPublisher.PublishAsync(new SeededDbMigrationEvent
-                    {
-                        MigrationVersion = m.Version,
-                        MigrationDescription = m.Description,
-                        DbContext = ctx
-                    }, cancelToken);
+                    await RunSeeder(entry, ctx, cancelToken);
                 }
                 catch (Exception ex)
                 {
-                    if (seeder.RollbackOnFailure)
+                    var m = entry.Migration;
+                    var seeder = (IDataSeeder<T>)entry.Seeder;
+
+                    if (seeder.AbortOnFailure)
                     {
                         _lastSeedException = new DbMigrationException(entry.PreviousMigration?.Description ?? _initialMigration?.Name, m.Description, ex.InnerException ?? ex, true);
 
@@ -310,6 +306,7 @@ namespace Smartstore.Core.Data.Migrations
 
                                 if (entry.PreviousMigration != null)
                                 {
+                                    var runner = (MigrationRunner)_migrationRunner;
                                     runner.ApplyMigrationDown(entry.PreviousMigration, entry.PreviousMigration.TransactionBehavior == TransactionBehavior.Default);
                                 }
                             }
@@ -327,6 +324,104 @@ namespace Smartstore.Core.Data.Migrations
             }
         }
 
+        /// <inheritdoc/>
+        public override async Task RunLateSeedersAsync(CancellationToken cancelToken = default)
+        {
+            if (_pendingSeeders.Count == 0)
+            {
+                return;
+            }
+
+            var migrations = GetMigrationInfosForVersions(_pendingSeeders);
+            var coreSeeders = new List<SeederEntry>();
+            var externalSeeders = new List<SeederEntry>();
+
+            foreach (var migration in migrations)
+            {
+                // Seeders for the core DbContext must be run in any case 
+                // (e.g. for Resource or Setting updates even from external modules).
+                if (migration.Migration is IDataSeeder<SmartDbContext> coreSeeder)
+                {
+                    coreSeeders.Add(new SeederEntry { Seeder = coreSeeder, Migration = migration });
+                }
+
+                if (!IsCoreMigration && migration.Migration is IDataSeeder<TContext> externalSeeder)
+                {
+                    externalSeeders.Add(new SeederEntry { Seeder = externalSeeder, Migration = migration });
+                }
+            }
+
+            cancelToken.ThrowIfCancellationRequested();
+
+            if (coreSeeders.Any())
+            {
+                // Apply core data seeders first,
+                await RunLateSeedersAsync(coreSeeders, _dbCore, cancelToken);
+            }
+
+            if (externalSeeders.Any())
+            {
+                // Apply external data seeders.
+                await RunLateSeedersAsync(externalSeeders, _db, cancelToken);
+            }
+        }
+
+        private async Task RunLateSeedersAsync<T>(IEnumerable<SeederEntry> seederEntries, T ctx, CancellationToken cancelToken = default) where T : HookingDbContext
+        {
+            foreach (var entry in seederEntries)
+            {
+                if (cancelToken.IsCancellationRequested)
+                {
+                    break;
+                }
+
+                try
+                {
+                    await RunSeeder(entry, ctx, cancelToken);
+                    _pendingSeeders.Remove(entry.Migration.Version);
+                }
+                catch (Exception ex)
+                {
+                    var m = entry.Migration;
+                    var seeder = (IDataSeeder<T>)entry.Seeder;
+
+                    if (seeder.AbortOnFailure)
+                    {
+                        throw new DbMigrationException(null, m.Description, ex.InnerException ?? ex, true);
+                    }
+                    else
+                    {
+                        _logger.Error(ex, "Seed error in migration '{0}'.", m.Description);
+                    }  
+                }
+            }
+        }
+
+        private async Task RunSeeder<T>(SeederEntry entry, T ctx, CancellationToken cancelToken = default) where T : HookingDbContext
+        {
+            var m = entry.Migration;
+            var seeder = (IDataSeeder<T>)entry.Seeder;
+
+            // Pre seed event.
+            await _eventPublisher.PublishAsync(new SeedingDbMigrationEvent
+            {
+                MigrationVersion = m.Version,
+                MigrationDescription = m.Description,
+                DbContext = ctx
+            }, cancelToken);
+
+            // Seed.
+            await seeder.SeedAsync(ctx, cancelToken);
+
+            // Post seed event.
+            await _eventPublisher.PublishAsync(new SeededDbMigrationEvent
+            {
+                MigrationVersion = m.Version,
+                MigrationDescription = m.Description,
+                DbContext = ctx
+            }, cancelToken);
+        }
+
         protected virtual void ConfigureConventions(IConventionSet conventionSet)
         {
             var options = _db.Options.FindExtension<DbFactoryOptionsExtension>();
@@ -340,6 +435,17 @@ namespace Smartstore.Core.Data.Migrations
             {
                 provider.Configure(conventionSet);
             }
+        }
+
+        private IEnumerable<IMigrationInfo> GetMigrationInfosForVersions(IEnumerable<long> versions)
+        {
+            var migrations =
+                from v in versions
+                let descriptor = MigrationTable.GetMigrationByVersion(v)
+                let instance = CreateMigration(descriptor.Type)
+                select _migrationRunnerConventions.GetMigrationInfoForMigration(instance);
+
+            return migrations;
         }
 
         protected class SeederEntry

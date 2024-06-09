@@ -2,13 +2,11 @@
 using Smartstore.Admin.Models.Topics;
 using Smartstore.Collections;
 using Smartstore.ComponentModel;
-using Smartstore.Core.Catalog.Brands;
-using Smartstore.Core.Catalog.Categories;
-using Smartstore.Core.Catalog.Products;
 using Smartstore.Core.Content.Menus;
 using Smartstore.Core.Content.Topics;
 using Smartstore.Core.Identity;
 using Smartstore.Core.Localization;
+using Smartstore.Core.Logging;
 using Smartstore.Core.Rules.Filters;
 using Smartstore.Core.Security;
 using Smartstore.Core.Seo;
@@ -123,6 +121,31 @@ namespace Smartstore.Admin.Controllers
             return Json(gridModel);
         }
 
+        [HttpPost]
+        [Permission(Permissions.Cms.Topic.Delete)]
+        public async Task<IActionResult> TopicDelete(GridSelection selection)
+        {
+            var success = false;
+            var count = 0;
+            var entities = await _db.Topics.GetManyAsync(selection.GetEntityIds(), true);
+
+            if (entities.Count > 0)
+            {
+                try
+                {
+                    _db.Topics.RemoveRange(entities);
+                    count = await _db.SaveChangesAsync();
+                    success = true;
+                }
+                catch (Exception ex)
+                {
+                    NotifyError(ex);
+                }
+            }
+
+            return Json(new { Success = success, Count = count });
+        }
+
         [Permission(Permissions.Cms.Topic.Create)]
         public IActionResult Create()
         {
@@ -160,9 +183,8 @@ namespace Smartstore.Admin.Controllers
                 _db.Topics.Add(topic);
                 await _db.SaveChangesAsync();
 
-                var slugResult = await topic.ValidateSlugAsync(model.SeName, topic.Title.NullEmpty() ?? topic.SystemName, true);
+                var slugResult = await _urlService.SaveSlugAsync(topic, model.SeName, topic.Title.NullEmpty() ?? topic.SystemName, true);
                 model.SeName = slugResult.Slug;
-                await _urlService.ApplySlugAsync(slugResult, true);
 
                 await UpdateLocalesAsync(topic, model);
                 await _storeMappingService.ApplyStoreMappingsAsync(topic, model.SelectedStoreIds);
@@ -278,11 +300,8 @@ namespace Smartstore.Admin.Controllers
 
                 topic.CookieType = (CookieType?)model.CookieType;
 
-                var slugResult = await topic.ValidateSlugAsync(model.SeName, topic.Title.NullEmpty() ?? topic.SystemName, true);
+                var slugResult = await _urlService.SaveSlugAsync(topic, model.SeName, topic.Title.NullEmpty() ?? topic.SystemName, true);
                 model.SeName = slugResult.Slug;
-                await _urlService.ApplySlugAsync(slugResult);
-
-                await _db.SaveChangesAsync();
 
                 await UpdateLocalesAsync(topic, model);
                 await _storeMappingService.ApplyStoreMappingsAsync(topic, model.SelectedStoreIds);
@@ -312,7 +331,7 @@ namespace Smartstore.Admin.Controllers
             var topic = await _db.Topics.FindByIdAsync(id);
             if (topic == null)
             {
-                return RedirectToAction(nameof(List));
+                return NotFound();
             }
 
             if (topic.IsSystemTopic)
@@ -398,9 +417,8 @@ namespace Smartstore.Admin.Controllers
                 await _localizedEntityService.ApplyLocalizedValueAsync(topic, x => x.MetaDescription, localized.MetaDescription, localized.LanguageId);
                 await _localizedEntityService.ApplyLocalizedValueAsync(topic, x => x.MetaTitle, localized.MetaTitle, localized.LanguageId);
 
-                var slugResult = await topic.ValidateSlugAsync(localized.SeName, localized.Title.NullEmpty() ?? localized.ShortTitle, false, localized.LanguageId);
+                var slugResult = await _urlService.SaveSlugAsync(topic, localized.SeName, localized.Title.NullEmpty() ?? localized.ShortTitle, false, localized.LanguageId);
                 model.SeName = slugResult.Slug;
-                await _urlService.ApplySlugAsync(slugResult);
             }
         }
 
@@ -459,6 +477,18 @@ namespace Smartstore.Admin.Controllers
                     Text = "ThirdParty",
                     Value = ((int)CookieType.ThirdParty).ToString(),
                     Selected = CookieType.ThirdParty == (CookieType?)selectedType
+                },
+                new SelectListItem
+                {
+                    Text = "ConsentAdUserData",
+                    Value = ((int)CookieType.ConsentAdUserData).ToString(),
+                    Selected = CookieType.ConsentAdUserData == (CookieType?)selectedType
+                },
+                new SelectListItem
+                {
+                    Text = "ConsentAdPersonalization",
+                    Value = ((int)CookieType.ConsentAdPersonalization).ToString(),
+                    Selected = CookieType.ConsentAdPersonalization == (CookieType?)selectedType
                 }
             });
         }

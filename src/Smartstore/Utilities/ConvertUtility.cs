@@ -49,10 +49,7 @@ namespace Smartstore.Utilities
 
         public static bool TryConvert(object? value, Type to, CultureInfo? culture, [MaybeNullWhen(false)] out object? convertedValue)
         {
-            if (to == null)
-            {
-                throw new ArgumentNullException(nameof(to));
-            }
+            ArgumentNullException.ThrowIfNull(to);
 
             convertedValue = null;
 
@@ -100,7 +97,7 @@ namespace Smartstore.Utilities
 
         public static ExpandoObject ToExpando(object value)
         {
-            Guard.NotNull(value, nameof(value));
+            Guard.NotNull(value);
 
             var anonymousDictionary = HtmlHelper.AnonymousObjectToHtmlAttributes(value);
             IDictionary<string, object?> expando = new ExpandoObject();

@@ -1,6 +1,7 @@
 ﻿using Microsoft.AspNetCore.Mvc;
 using Smartstore.Caching;
 using Smartstore.Collections;
+using Smartstore.Core.Localization;
 using Smartstore.Diagnostics;
 
 namespace Smartstore.Core.Content.Menus
@@ -22,8 +23,8 @@ namespace Smartstore.Core.Content.Menus
         private List<string> _providers;
 
         public ICommonServices Services { get; set; }
-
-        public IMenuPublisher MenuPublisher { get; set; }
+        public Localizer T { get; set; } = NullLocalizer.Instance;
+        public required IMenuPublisher MenuPublisher { protected get; set; }
 
         public abstract string Name { get; }
 
@@ -62,10 +63,10 @@ namespace Smartstore.Core.Content.Menus
             return Task.CompletedTask;
         }
 
-        protected virtual Task DoApplyPermissionsAsync(TreeNode<MenuItem> root)
+        protected virtual async Task DoApplyPermissionsAsync(TreeNode<MenuItem> root)
         {
             // Hide based on permissions
-            root.Traverse(async x =>
+            await root.TraverseAwait(async x =>
             {
                 if (!await MenuItemAccessPermittedAsync(x.Value))
                 {
@@ -85,8 +86,6 @@ namespace Smartstore.Core.Content.Menus
                     }
                 }
             });
-
-            return Task.CompletedTask;
         }
 
         protected abstract string GetCacheKey();

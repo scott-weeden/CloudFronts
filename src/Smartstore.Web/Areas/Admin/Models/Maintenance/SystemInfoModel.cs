@@ -32,14 +32,14 @@ namespace Smartstore.Admin.Models.Maintenance
         public DateTime UtcTime { get; set; }
 
         [LocalizedDisplay("*LoadedAssemblies")]
-        public List<LoadedAssembly> LoadedAssemblies { get; set; } = new();
+        public List<LoadedAssembly> LoadedAssemblies { get; set; } = [];
 
         [LocalizedDisplay("*DatabaseSize")]
         public long DatabaseSize { get; set; }
         public string DatabaseSizeString => DatabaseSize == 0 ? string.Empty : Prettifier.HumanizeBytes(DatabaseSize);
 
         [LocalizedDisplay("*DbTableInfo")]
-        public List<DbTableInfo> DbTableInfos { get; set; } = new();
+        public List<DbTableInfo> DbTableInfos { get; set; } = [];
 
         [LocalizedDisplay("*UsedMemorySize")]
         public long UsedMemorySize { get; set; }
@@ -48,10 +48,11 @@ namespace Smartstore.Admin.Models.Maintenance
         [LocalizedDisplay("*DataProviderFriendlyName")]
         public string DataProviderFriendlyName { get; set; }
 
-        public bool ShrinkDatabaseEnabled { get; set; }
+        public bool OptimizeDatabaseEnabled { get; set; }
+        public bool OptimizeTableEnabled { get; set; }
 
         [Obsolete("Too fragile in .NET Core")]
-        public Dictionary<string, long> MemoryCacheStats { get; set; } = new Dictionary<string, long>();
+        public Dictionary<string, long> MemoryCacheStats { get; set; } = [];
 
         public class LoadedAssembly
         {

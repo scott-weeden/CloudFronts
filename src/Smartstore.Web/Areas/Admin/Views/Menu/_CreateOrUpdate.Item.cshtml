@@ -37,7 +37,6 @@
     <script src="~/lib/editors/summernote/plugins/lang/{lang}.js" sm-locale-for="WorkContext.WorkingLanguage"></script>
 </widget>
 
-<link rel="stylesheet" href="~/lib/editors/summernote/summernote-bootstrap.css" sm-key="summernote" sm-target-zone="stylesheets" />
 <link rel="stylesheet" href="~/bundle/css/codemirror.css" sm-key="codemirror" sm-target-zone="stylesheets" />
 @* END *@
 
@@ -55,7 +54,7 @@
                         <smart-label asp-for="ProviderName"/>
                     </div>
                     <div class="adminData">
-                        @Html.Editor("Model", "MenuItem." + Model.ProviderName, "Model")
+                        @Html.Editor("Model", "MenuItem." + Model.ProviderName.Titleize(), "Model")
                         <span asp-validation-for="Model"></span>
                     </div>
                 </div>
@@ -64,9 +63,7 @@
                         <smart-label asp-for="ParentItemId"/>
                     </div>
                     <div class="adminData">
-                        <select asp-for="ParentItemId" asp-items="Model.AllItems">
-                            <option>@T("Common.Unspecified")</option>
-                        </select>
+                        <select asp-for="ParentItemId" asp-items="Model.AllItems" asp-placeholder="@T("Common.Unspecified")"></select>
                         <span asp-validation-for="ParentItemId"></span>
                     </div>
                 </div>
@@ -188,9 +185,7 @@
                         <smart-label asp-for="IconColor"/>
                     </div>
                     <div class="adminData">
-                        <select asp-for="IconColor" asp-items="@iconColors" class="icon-color-chooser">
-                            <option>@T("Common.Unspecified")</option>
-                        </select>
+                        <select asp-for="IconColor" asp-items="@iconColors" class="icon-color-chooser" asp-placeholder="@T("Common.Unspecified")"></select>
                         <span asp-validation-for="IconColor"></span>
                     </div>
                 </div>
@@ -248,9 +243,14 @@
 <script sm-target-zone="scripts" data-origin="menu-item-create-or-update">
     $(function () {
         // Icon colors.
-        $('.icon-color-chooser > option').each(function () {
-            var option = $(this);
-            option.data("color", localStorage.getItem('--' + this.value));
+        const colorVars = Smartstore.Admin.getThemeColorVars();
+        const colorChooser = $('.icon-color-chooser');
+
+        colorChooser.find('option').each(function () {
+            const option = $(this);
+            option.data("color", colorVars['--' + this.value]);
         });
+
+        colorChooser.trigger('change');
     });
 </script>

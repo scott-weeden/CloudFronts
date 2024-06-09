@@ -35,10 +35,12 @@ namespace Smartstore.AmazonPay.Controllers
         private readonly ICheckoutStateAccessor _checkoutStateAccessor;
         private readonly IOrderProcessingService _orderProcessingService;
         private readonly IOrderCalculationService _orderCalculationService;
+        private readonly ICheckoutWorkflow _checkoutWorkflow;
         private readonly IPaymentService _paymentService;
         private readonly IRoundingHelper _roundingHelper;
         private readonly AmazonPaySettings _settings;
         private readonly OrderSettings _orderSettings;
+        private readonly ShoppingCartSettings _shoppingCartSettings;
 
         public AmazonPayController(
             SmartDbContext db,
@@ -49,10 +51,12 @@ namespace Smartstore.AmazonPay.Controllers
             ICheckoutStateAccessor checkoutStateAccessor,
             IOrderProcessingService orderProcessingService,
             IOrderCalculationService orderCalculationService,
+            ICheckoutWorkflow checkoutWorkflow,
             IPaymentService paymentService,
             IRoundingHelper roundingHelper,
             AmazonPaySettings amazonPaySettings,
-            OrderSettings orderSettings)
+            OrderSettings orderSettings,
+            ShoppingCartSettings shoppingCartSettings)
         {
             _db = db;
             _amazonPayService = amazonPayService;
@@ -62,10 +66,12 @@ namespace Smartstore.AmazonPay.Controllers
             _checkoutStateAccessor = checkoutStateAccessor;
             _orderProcessingService = orderProcessingService;
             _orderCalculationService = orderCalculationService;
+            _checkoutWorkflow = checkoutWorkflow;
             _paymentService = paymentService;
             _roundingHelper = roundingHelper;
             _settings = amazonPaySettings;
             _orderSettings = orderSettings;
+            _shoppingCartSettings = shoppingCartSettings;
         }
 
         /// <summary>
@@ -99,7 +105,7 @@ namespace Smartstore.AmazonPay.Controllers
                     };
 
                     // TODO later: config for specialRestrictions 'RestrictPOBoxes', 'RestrictPackstations'.
-                    if (cart.HasItems && cart.IsShippingRequired())
+                    if (cart.HasItems && cart.IsShippingRequired)
                     {
                         var allowedCountryCodes = await _db.Countries
                             .ApplyStandardFilter(false, store.Id)
@@ -148,11 +154,17 @@ namespace Smartstore.AmazonPay.Controllers
         {
             try
             {
-                var result = await ProcessCheckoutReview(amazonCheckoutSessionId);
-
-                if (result.Success)
+                var cart = await _shoppingCartService.GetCartAsync(storeId: Services.StoreContext.CurrentStore.Id);
+                var review = await ProcessCheckoutReview(cart, amazonCheckoutSessionId);
+                if (review.Success)
                 {
-                    var actionName = result.IsShippingMethodMissing
+                    var result = await _checkoutWorkflow.AdvanceAsync(new(cart, HttpContext, Url));
+                    if (result.ActionResult != null)
+                    {
+                        return result.ActionResult;
+                    }
+
+                    var actionName = review.IsShippingMethodMissing
                         ? nameof(CheckoutController.ShippingMethod)
                         : nameof(CheckoutController.Confirm);
 
@@ -168,9 +180,11 @@ namespace Smartstore.AmazonPay.Controllers
             return RedirectToRoute("ShoppingCart");
         }
 
-        private async Task<CheckoutReviewResult> ProcessCheckoutReview(string checkoutSessionId)
+        private async Task<CheckoutReviewResult> ProcessCheckoutReview(ShoppingCart cart, string checkoutSessionId)
         {
             var result = new CheckoutReviewResult();
+            var customer = cart.Customer;
+            var ga = customer.GenericAttributes;
 
             if (checkoutSessionId.IsEmpty())
             {
@@ -178,12 +192,7 @@ namespace Smartstore.AmazonPay.Controllers
                 return result;
             }
 
-            var store = Services.StoreContext.CurrentStore;
-            var cart = await _shoppingCartService.GetCartAsync(storeId: store.Id);
-            var isShippingRequired = cart.IsShippingRequired();
-            var customer = cart.Customer;
-
-            result.IsShippingMethodMissing = isShippingRequired && customer.GenericAttributes.SelectedShippingOption == null;
+            result.IsShippingMethodMissing = cart.IsShippingRequired && ga.SelectedShippingOption == null;
 
             if (!cart.HasItems)
             {
@@ -191,7 +200,7 @@ namespace Smartstore.AmazonPay.Controllers
                 return result;
             }
 
-            if (!_orderSettings.AnonymousCheckoutAllowed && customer.IsGuest())
+            if (!_orderSettings.AnonymousCheckoutAllowed && !customer.IsRegistered())
             {
                 NotifyWarning(T("Checkout.AnonymousNotAllowed"));
                 return result;
@@ -200,29 +209,33 @@ namespace Smartstore.AmazonPay.Controllers
             await _db.LoadCollectionAsync(customer, x => x.Addresses);
 
             // Create addresses from AmazonPay checkout session.
-            var client = HttpContext.GetAmazonPayApiClient(store.Id);
+            var client = HttpContext.GetAmazonPayApiClient(cart.StoreId);
             var session = client.GetCheckoutSession(checkoutSessionId);
 
-            if (session.BillingAddress == null)
-            {
-                // Orders without a billing address cannot be created.
-                NotifyError(T("Plugins.Payments.AmazonPay.MissingBillingAddress"));
-                return result;
-            }
-
-            var billTo = await _amazonPayService.CreateAddressAsync(session, customer, true);
-            if (!billTo.Success)
-            {
-                // We have to redirect the buyer back to the shopping cart because we cannot change the address at this stage.
-                // We cannot store invalid addresses and assign them to a customer.
-                NotifyWarning(T("Plugins.Payments.AmazonPay.BillingToCountryNotAllowed"));
-                result.RequiresAddressUpdate = true;
-                return result;
-            }
-
+            CheckoutAdressResult billTo = null;
             CheckoutAdressResult shipTo = null;
 
-            if (isShippingRequired)
+            if (cart.Requirements.HasFlag(CheckoutRequirements.BillingAddress))
+            {
+                if (session.BillingAddress == null)
+                {
+                    // Orders without a billing address cannot be created.
+                    NotifyError(T("Plugins.Payments.AmazonPay.MissingBillingAddress"));
+                    return result;
+                }
+
+                billTo = await _amazonPayService.CreateAddressAsync(session, customer, true);
+                if (!billTo.Success)
+                {
+                    // We have to redirect the buyer back to the shopping cart because we cannot change the address at this stage.
+                    // We cannot store invalid addresses and assign them to a customer.
+                    NotifyWarning(T("Plugins.Payments.AmazonPay.BillingToCountryNotAllowed"));
+                    result.RequiresAddressUpdate = true;
+                    return result;
+                }
+            }
+
+            if (cart.IsShippingRequired)
             {
                 shipTo = await _amazonPayService.CreateAddressAsync(session, customer, false);
                 if (!shipTo.Success)
@@ -234,22 +247,30 @@ namespace Smartstore.AmazonPay.Controllers
             }
 
             // Update customer.
-            var billingAddress = customer.FindAddress(billTo.Address);
-            if (billingAddress != null)
+            if (billTo != null)
             {
-                customer.BillingAddress = billingAddress;
+                var billingAddress = customer.FindAddress(billTo.Address);
+                if (billingAddress != null)
+                {
+                    customer.BillingAddress = billingAddress;
+                }
+                else
+                {
+                    customer.Addresses.Add(billTo.Address);
+                    customer.BillingAddress = billTo.Address;
+                }
+
+                if (_shoppingCartSettings.QuickCheckoutEnabled)
+                {
+                    ga.DefaultBillingAddressId = customer.BillingAddress.Id;
+                }
             }
             else
             {
-                customer.Addresses.Add(billTo.Address);
-                customer.BillingAddress = billTo.Address;
+                customer.BillingAddress = null;
             }
 
-            if (shipTo == null)
-            {
-                customer.ShippingAddress = null;
-            }
-            else
+            if (shipTo != null)
             {
                 var shippingAddress = customer.FindAddress(shipTo.Address);
                 if (shippingAddress != null)
@@ -261,18 +282,27 @@ namespace Smartstore.AmazonPay.Controllers
                     customer.Addresses.Add(shipTo.Address);
                     customer.ShippingAddress = shipTo.Address;
                 }
+
+                if (_shoppingCartSettings.QuickCheckoutEnabled)
+                {
+                    ga.DefaultShippingAddressId = customer.ShippingAddress.Id;
+                }
+            }
+            else
+            {
+                customer.ShippingAddress = null;
             }
 
-            customer.GenericAttributes.SelectedPaymentMethod = AmazonPayProvider.SystemName;
+            ga.SelectedPaymentMethod = AmazonPayProvider.SystemName;
 
             if (_settings.CanSaveEmailAndPhone(customer.Email))
             {
                 customer.Email = session.Buyer.Email;
             }
 
-            if (_settings.CanSaveEmailAndPhone(customer.GenericAttributes.Phone))
+            if (_settings.CanSaveEmailAndPhone(ga.Phone))
             {
-                customer.GenericAttributes.Phone = billTo.Address.PhoneNumber.NullEmpty() ?? session.Buyer.PhoneNumber;
+                ga.Phone = billTo.Address.PhoneNumber.NullEmpty() ?? session.Buyer.PhoneNumber;
             }
 
             await _db.SaveChangesAsync();
@@ -286,11 +316,11 @@ namespace Smartstore.AmazonPay.Controllers
                 _checkoutStateAccessor.CheckoutState.PaymentSummary = string.Join(", ", session.PaymentPreferences.Select(x => x.PaymentDescriptor));
             }
 
-            if (!HttpContext.Session.TryGetObject<ProcessPaymentRequest>("OrderPaymentInfo", out var paymentRequest)
+            if (!HttpContext.Session.TryGetObject<ProcessPaymentRequest>(CheckoutState.OrderPaymentInfoName, out var paymentRequest)
                 || paymentRequest == null
                 || paymentRequest.OrderGuid == Guid.Empty)
             {
-                HttpContext.Session.TrySetObject("OrderPaymentInfo", new ProcessPaymentRequest { OrderGuid = Guid.NewGuid() });
+                HttpContext.Session.TrySetObject(CheckoutState.OrderPaymentInfoName, new ProcessPaymentRequest { OrderGuid = Guid.NewGuid() });
             }
 
             return result;
@@ -318,7 +348,7 @@ namespace Smartstore.AmazonPay.Controllers
                     throw new AmazonPayException(T("Payment.MissingCheckoutState", "AmazonPayCheckoutState." + nameof(state.SessionId)));
                 }
 
-                if (!HttpContext.Session.TryGetObject<ProcessPaymentRequest>("OrderPaymentInfo", out var paymentRequest) || paymentRequest == null)
+                if (!HttpContext.Session.TryGetObject<ProcessPaymentRequest>(CheckoutState.OrderPaymentInfoName, out var paymentRequest) || paymentRequest == null)
                 {
                     paymentRequest = new ProcessPaymentRequest();
                 }
@@ -717,9 +747,9 @@ namespace Smartstore.AmazonPay.Controllers
         /// </summary>
         public async Task<IActionResult> ShareKey(string payload)
         {
-            Response.Headers.Add("Access-Control-Allow-Origin", "https://payments.amazon.com");
-            Response.Headers.Add("Access-Control-Allow-Methods", "GET, POST");
-            Response.Headers.Add("Access-Control-Allow-Headers", "Content-Type");
+            Response.Headers["Access-Control-Allow-Origin"] = "https://payments.amazon.com";
+            Response.Headers["Access-Control-Allow-Methods"] = "GET, POST";
+            Response.Headers["Access-Control-Allow-Headers"] = "Content-Type";
 
             try
             {

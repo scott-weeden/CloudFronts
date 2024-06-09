@@ -1,4 +1,5 @@
-﻿using System.Drawing;
+﻿using System.Buffers;
+using System.Drawing;
 using System.Linq.Dynamic.Core;
 using System.Runtime.CompilerServices;
 using Microsoft.AspNetCore.WebUtilities;
@@ -237,6 +238,11 @@ namespace Smartstore.Core.Content.Media
         public async Task<List<MediaFileInfo>> GetFilesByIdsAsync(int[] ids, MediaLoadFlags flags = MediaLoadFlags.AsNoTracking)
         {
             Guard.NotNull(ids);
+
+            if (ids.Length == 0)
+            {
+                return [];
+            }
 
             var query = _db.MediaFiles.Where(x => ids.Contains(x.Id));
             var result = await _searcher.ApplyLoadFlags(query, flags).ToListAsync();
@@ -1143,11 +1149,54 @@ namespace Smartstore.Core.Content.Media
             return mediaFile;
         }
 
+        public async Task<int> EnsureMetadataResolvedAsync(string folderPath = null)
+        {
+            if (_storageProvider is not FileSystemMediaStorageProvider storageProvider)
+            {
+                throw new InvalidOperationException($"Retrospective resolution of media metadata is only possible if {nameof(FileSystemMediaStorageProvider)} is active.");
+            }
+            
+            var message = string.Empty;
+
+            var query = _db.MediaFiles
+                .Where(x => string.IsNullOrEmpty(x.Name));
+
+            if (folderPath.HasValue())
+            {
+                var node = _folderService.GetNodeByPath(folderPath) ?? throw new ArgumentException($"The folder path '{folderPath}' does not exist.");
+                query = query.Where(x => x.FolderId == node.Value.Id);
+            }
+
+            var fastPager = new FastPager<MediaFile>(query);
+            var numResolved = 0;
+
+            while ((await fastPager.ReadNextPageAsync<MediaFile>()).Out(out var files))
+            {
+                foreach (var file in files)
+                {
+                    var filePath = storageProvider.GetPath(file);
+
+                    _helper.TokenizePath(filePath, true, out var pathData);
+                    
+                    file.Name = pathData.FileName;
+                    file.Extension = pathData.Extension;
+                    file.MimeType = pathData.MimeType;
+                    file.MediaType ??= _typeResolver.Resolve(pathData.Extension, pathData.MimeType);
+
+                    await EnsureMetadataResolvedAsync(file, false);
+                }
+
+                numResolved += await _db.SaveChangesAsync();
+            }
+
+            return numResolved;
+        }
+
         private async Task EnsureMetadataResolvedAsync(MediaFile file, bool saveOnResolve)
         {
             var mediaType = _typeResolver.Resolve(file.Extension, file.MimeType);
 
-            var resolveDimensions = mediaType == MediaType.Image && file.Width == null && file.Height == null;
+            var resolveDimensions = mediaType == MediaType.Image && (file.Width == null || file.Height == null);
             var resolveSize = file.Size <= 0;
 
             Stream stream = null;
@@ -1272,9 +1321,10 @@ namespace Smartstore.Core.Content.Media
             }
         }
 
+        private static readonly SearchValues<char> _pathSeparators = SearchValues.Create("/\\");
         private static bool IsPath(string path)
         {
-            return path.IndexOfAny(new[] { '/', '\\' }) > -1;
+            return path.AsSpan().IndexOfAny(_pathSeparators) > -1;
         }
 
         #endregion

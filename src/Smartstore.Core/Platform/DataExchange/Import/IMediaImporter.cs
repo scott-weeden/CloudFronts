@@ -1,4 +1,6 @@
-﻿using Smartstore.Collections;
+﻿#nullable enable
+
+using Smartstore.Collections;
 using Smartstore.Core.Catalog.Categories;
 using Smartstore.Core.Catalog.Products;
 using Smartstore.Core.Content.Media;
@@ -18,7 +20,7 @@ namespace Smartstore.Core.DataExchange.Import
         /// <summary>
         /// A handler that is called when reportable events such as errors occur.
         /// </summary>
-        Action<ImportMessage, DownloadManagerItem> MessageHandler { get; set; }
+        Action<ImportMessage, DownloadManagerItem>? MessageHandler { get; set; }
 
         /// <summary>
         /// Creates a download manager item.
@@ -33,15 +35,17 @@ namespace Smartstore.Core.DataExchange.Import
         /// <param name="state">Any state to identify the source later after batch save. E.g. <see cref="ImportRow{T}"/> etc.</param>
         /// <param name="displayOrder">Display order of the item.</param>
         /// <param name="fileNameLookup">Lookup for existing file names to avoid name duplicates.</param>
+        /// <param name="maxFileNameLength">Max length of generated file names. <c>int.MaxValue</c> to not truncate file names.</param>
         /// <returns>Download manager item or <c>null</c> if none could be created.</returns>
-        DownloadManagerItem CreateDownloadItem(
+        DownloadManagerItem? CreateDownloadItem(
             IDirectory imageDirectory,
             IDirectory downloadDirectory,
             BaseEntity entity,
-            string urlOrPath,
-            object state = null,
+            string? urlOrPath,
+            object? state = null,
             int displayOrder = 0,
-            HashSet<string> fileNameLookup = null);
+            HashSet<string>? fileNameLookup = null,
+            int maxFileNameLength = int.MaxValue);
 
         /// <summary>
         /// Generic method that imports a batch of media files assigned to entities with a 1:1 relationship to media files.
@@ -56,10 +60,10 @@ namespace Smartstore.Core.DataExchange.Import
         /// <returns>Number of actually imported files</returns>
         Task<int> ImportMediaFilesAsync<T>(
             DbContextScope scope,
-            ICollection<DownloadManagerItem> items,
+            ICollection<DownloadManagerItem>? items,
             MediaFolderNode album,
-            Action<T, int> assignMediaFileHandler,
-            Func<T, Stream, Task<bool>> checkAssignedMediaFileHandler,
+            Action<DownloadManagerItem, int> assignMediaFileHandler,
+            Func<DownloadManagerItem, Stream, Task<bool>> checkAssignedMediaFileHandler,
             bool checkExistingFile,
             DuplicateFileHandling duplicateFileHandling = DuplicateFileHandling.Rename,
             CancellationToken cancelToken = default) where T : BaseEntity;
@@ -78,7 +82,7 @@ namespace Smartstore.Core.DataExchange.Import
         /// <returns>Number of actually imported files</returns>
         Task<int> ImportMediaFilesManyAsync(
             DbContextScope scope,
-            ICollection<DownloadManagerItem> items,
+            ICollection<DownloadManagerItem>? items,
             MediaFolderNode album,
             Multimap<int, IMediaFile> existingFiles,
             Func<MediaFile, DownloadManagerItem, IMediaFile> assignMediaFileHandler,
@@ -93,7 +97,7 @@ namespace Smartstore.Core.DataExchange.Import
         /// <returns>Number of new images.</returns>
         Task<int> ImportProductImagesAsync(
             DbContextScope scope,
-            ICollection<DownloadManagerItem> items,
+            ICollection<DownloadManagerItem>? items,
             DuplicateFileHandling duplicateFileHandling = DuplicateFileHandling.Rename,
             CancellationToken cancelToken = default);
 
@@ -110,7 +114,7 @@ namespace Smartstore.Core.DataExchange.Import
         /// <returns>Number of new images.</returns>
         Task<int> ImportProductImagesAsync(
             Product product,
-            ICollection<FileBatchSource> items,
+            ICollection<FileBatchSource>? items,
             DuplicateFileHandling duplicateFileHandling = DuplicateFileHandling.Rename,
             CancellationToken cancelToken = default);
 
@@ -122,7 +126,7 @@ namespace Smartstore.Core.DataExchange.Import
         /// <returns>Number of new images.</returns>
         Task<int> ImportCategoryImagesAsync(
             DbContextScope scope,
-            ICollection<DownloadManagerItem> items,
+            ICollection<DownloadManagerItem>? items,
             DuplicateFileHandling duplicateFileHandling = DuplicateFileHandling.Rename,
             CancellationToken cancelToken = default);
 
@@ -134,7 +138,7 @@ namespace Smartstore.Core.DataExchange.Import
         /// <returns>Number of new images.</returns>
         Task<int> ImportCustomerAvatarsAsync(
             DbContextScope scope,
-            ICollection<DownloadManagerItem> items,
+            ICollection<DownloadManagerItem>? items,
             DuplicateFileHandling duplicateFileHandling = DuplicateFileHandling.Rename,
             CancellationToken cancelToken = default);
     }

@@ -39,7 +39,7 @@ namespace Smartstore.AmazonPay.Components
 
             if (_settings.PublicKeyId.IsEmpty() ||
                 _settings.PrivateKey.IsEmpty() ||
-                (!_orderSettings.AnonymousCheckoutAllowed && customer.IsGuest()) ||
+                (!_orderSettings.AnonymousCheckoutAllowed && !customer.IsRegistered()) ||
                 (_settings.ShowPayButtonForAdminOnly && !customer.IsAdmin()))
             {
                 return Empty();
@@ -69,7 +69,7 @@ namespace Smartstore.AmazonPay.Components
 
             var model = new AmazonPayButtonModel(
                 _settings,
-                cart.IsShippingRequired() ? "PayAndShip" : "PayOnly",
+                cart.IsShippingRequired ? "PayAndShip" : "PayOnly",
                 currencyCode,
                 Services.WorkContext.WorkingLanguage.UniqueSeoCode);
 

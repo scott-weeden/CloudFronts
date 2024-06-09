@@ -1,4 +1,5 @@
-﻿using Smartstore.Core.Catalog.Attributes;
+﻿using System.Collections.Frozen;
+using Smartstore.Core.Catalog.Attributes;
 using Smartstore.Core.Catalog.Brands;
 using Smartstore.Core.Catalog.Categories;
 using Smartstore.Core.Catalog.Pricing;
@@ -29,7 +30,7 @@ namespace Smartstore.Core.DataExchange.Import
         /// </summary>
         const string ParentProductIdsKey = "ProductImporter.ParentProductIds";
 
-        private static readonly Dictionary<string, Expression<Func<Product, string>>> _localizableProperties = new()
+        private static readonly FrozenDictionary<string, Expression<Func<Product, string>>> _localizableProperties = new Dictionary<string, Expression<Func<Product, string>>>()
         {
             { nameof(Product.Name), x => x.Name },
             { nameof(Product.ShortDescription), x => x.ShortDescription },
@@ -38,7 +39,7 @@ namespace Smartstore.Core.DataExchange.Import
             { nameof(Product.MetaDescription), x => x.MetaDescription },
             { nameof(Product.MetaTitle), x => x.MetaTitle },
             { nameof(Product.BundleTitleText), x => x.BundleTitleText }
-        };
+        }.ToFrozenDictionary();
 
         private readonly IMediaImporter _mediaImporter;
 
@@ -290,7 +291,7 @@ namespace Smartstore.Core.DataExchange.Import
 
                     if (cargo.NumberOfNewImages > 0)
                     {
-                        context.Result.AddWarning("Importing new images may result in image duplicates if TinyImage is installed or the images are larger than \"Maximum image size\" setting.");
+                        context.Result.AddInfo("Importing new images may result in image duplicates if TinyImage is installed or the images are larger than \"Maximum image size\" setting.");
                     }
                 }
             }
@@ -481,6 +482,7 @@ namespace Smartstore.Core.DataExchange.Import
                 row.SetProperty(context.Result, (x) => x.LimitedToStores, !row.GetDataValue<List<int>>("StoreIds").IsNullOrEmpty());
                 row.SetProperty(context.Result, (x) => x.CustomsTariffNumber);
                 row.SetProperty(context.Result, (x) => x.CountryOfOriginId);
+                row.SetProperty(context.Result, (x) => x.AttributeCombinationRequired);
 
                 if (row.TryGetDataValue(nameof(Product.QuantityControlType), out int qct))
                 {

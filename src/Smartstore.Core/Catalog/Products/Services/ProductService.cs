@@ -1,4 +1,4 @@
-﻿using System.Collections.Immutable;
+using System.Collections.Immutable;
 using Smartstore.Caching;
 using Smartstore.Collections;
 using Smartstore.Core.Catalog.Attributes;

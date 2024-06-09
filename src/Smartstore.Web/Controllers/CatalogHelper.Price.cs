@@ -5,6 +5,7 @@ using Smartstore.Core.Catalog.Search;
 using Smartstore.Core.Localization;
 using Smartstore.Diagnostics;
 using Smartstore.Web.Models.Catalog;
+using Smartstore.Web.Rendering;
 
 namespace Smartstore.Web.Controllers
 {
@@ -35,23 +36,9 @@ namespace Smartstore.Web.Controllers
                 return;
             }
 
-            if (product.CustomerEntersPrice && !isBundleItemPricing)
-            {
-                priceModel.CustomerEntersPrice = true;
-                return;
-            }
-
-            if (product.CallForPrice && !isBundleItemPricing)
-            {
-                priceModel.CallForPrice = true;
-                priceModel.FinalPrice = new Money(currency).WithPostFormat(T("Products.CallForPrice"));
-                model.HotlineTelephoneNumber = _contactDataSettings.HotlineTelephoneNumber.NullEmpty();
-                return;
-            }
-
             if (isBundlePricing)
             {
-                // Do not show any bundle item price for parent bundle with specific bundle pricing.
+                // Do not show any bundle item price if parent bundle has bundle pricing.
                 return;
             }
 
@@ -68,7 +55,7 @@ namespace Smartstore.Web.Controllers
                 // Apply price adjustments of selected attributes.
                 calculationContext.AddSelectedAttributes(modelContext.SelectedAttributes, product.Id, bundleItemId);
             }
-            else if (isBundle && product.BundlePerItemPricing && modelContext.VariantQuery.Variants.Any())
+            else if (isBundle && product.BundlePerItemPricing && modelContext.VariantQuery.Variants.Count > 0)
             {
                 // Apply price adjustments of selected bundle items attributes.
                 // INFO: bundles themselves don't have attributes, that's why modelContext.SelectedAttributes is null.
@@ -98,6 +85,15 @@ namespace Smartstore.Web.Controllers
             
             // Map base
             MapPriceBase(calculatedPrice, priceModel, true);
+
+            if ((priceModel.CallForPrice || priceModel.CustomerEntersPrice) && !isBundleItemPricing)
+            {
+                if (priceModel.CallForPrice)
+                {
+                    model.HotlineTelephoneNumber = _contactDataSettings.HotlineTelephoneNumber.NullEmpty();
+                }
+                return;
+            }
 
             // Countdown text
             priceModel.CountdownText = _priceLabelService.GetPromoCountdownText(calculatedPrice);
@@ -253,7 +249,7 @@ namespace Smartstore.Web.Controllers
                 options.ChildProductsBatchContext = context.AssociatedProductBatchContext;
 
                 associatedProducts = context.GroupedProducts[product.Id];
-                if (associatedProducts.Any())
+                if (associatedProducts.Count > 0)
                 {
                     contextProduct = associatedProducts.OrderBy(x => x.DisplayOrder).First();
                     _services.DisplayControl.Announce(contextProduct);
@@ -267,22 +263,14 @@ namespace Smartstore.Web.Controllers
             }
 
             // Return if there's no pricing at all.
-            if (contextProduct == null || contextProduct.CustomerEntersPrice || !context.AllowPrices || _priceSettings.PriceDisplayType == PriceDisplayType.Hide)
+            if (contextProduct == null || !context.AllowPrices || _priceSettings.PriceDisplayType == PriceDisplayType.Hide)
             {
                 return contextProduct;
             }
 
             // Return if group has no associated products.
-            if (product.ProductType == ProductType.GroupedProduct && !associatedProducts.Any())
+            if (product.ProductType == ProductType.GroupedProduct && associatedProducts.Count == 0)
             {
-                return contextProduct;
-            }
-
-            // Call for price
-            if (contextProduct.CallForPrice)
-            {
-                priceModel.CallForPrice = true;
-                priceModel.FinalPrice = new Money(options.TargetCurrency).WithPostFormat(context.Resources["Products.CallForPrice"]);
                 return contextProduct;
             }
 
@@ -296,6 +284,11 @@ namespace Smartstore.Web.Controllers
 
             // Map base
             MapPriceBase(calculatedPrice, priceModel, model.Parent.ShowBasePrice);
+
+            if (priceModel.CallForPrice || priceModel.CustomerEntersPrice)
+            {
+                return contextProduct;
+            }
 
             priceModel.ShowPriceLabel = _priceSettings.ShowPriceLabelInLists;
 
@@ -320,11 +313,18 @@ namespace Smartstore.Web.Controllers
 
         protected void MapPriceBase(CalculatedPrice price, PriceModel model, bool mapBasePrice = true)
         {
-            model.CalculatedPrice = price;
             model.FinalPrice = price.FinalPrice;
+            model.CallForPrice = price.PricingType == PricingType.CallForPrice;
+            model.CustomerEntersPrice = price.PricingType == PricingType.CustomerEnteredPrice;
+            model.HasCalculation = !model.CustomerEntersPrice || model.CallForPrice;
             model.Saving = price.Saving;
             model.ValidUntilUtc = price.ValidUntilUtc;
             model.ShowRetailPriceSaving = _priceSettings.ShowRetailPriceSaving;
+
+            if (model.CallForPrice || model.CustomerEntersPrice)
+            {
+                return;
+            }
 
             var product = price.Product;
             var forSummary = model is ProductSummaryPriceModel;
@@ -384,7 +384,7 @@ namespace Smartstore.Web.Controllers
             }
         }
 
-        private void AddPromoBadge(CalculatedPrice price, List<ProductBadgeModel> badges)
+        public void AddPromoBadge(CalculatedPrice price, List<ProductBadgeModel> badges)
         {
             // Add default promo badges as configured
             var (label, style) = _priceLabelService.GetPricePromoBadge(price);
@@ -394,7 +394,7 @@ namespace Smartstore.Web.Controllers
                 badges.Add(new ProductBadgeModel
                 {
                     Label = label,
-                    Style = style ?? "dark",
+                    Style = (style.IsNumeric() ? Enum.Parse<BadgeStyle>(style).ToString().ToLower() : style) ?? "dark",
                     DisplayOrder = 10
                 });
             }

@@ -8,6 +8,7 @@ using Smartstore.Core.Checkout.Shipping;
 using Smartstore.Core.Checkout.Tax;
 using Smartstore.Core.Common;
 using Smartstore.Core.Identity;
+using Smartstore.Core.Localization;
 using Smartstore.Core.Logging;
 using Smartstore.Core.Stores;
 using Smartstore.Utilities;
@@ -20,90 +21,94 @@ namespace Smartstore.Core.Checkout.Orders
         {
             Guard.NotNull(paymentRequest);
 
-            extraData ??= new();
+            extraData ??= [];
 
             if (paymentRequest.OrderGuid == Guid.Empty)
             {
                 paymentRequest.OrderGuid = Guid.NewGuid();
             }
 
-            var result = new OrderPlacementResult();
-            var initialOrder = await _db.Orders.FindByIdAsync(paymentRequest.InitialOrderId);
-
-            var customer = await _db.Customers
-                .IncludeCustomerRoles()
-                .FindByIdAsync(paymentRequest.CustomerId);
-
-            var (warnings, cart) = await ValidateOrderPlacementAsync(paymentRequest, initialOrder, customer);
-            if (warnings.Count > 0)
+            var ctx = new PlaceOrderContext
             {
-                result.Errors.AddRange(warnings);
-                return result;
-            }
-
-            var context = new PlaceOrderContext
-            {
-                Result = result,
-                InitialOrder = initialOrder,
-                Customer = customer,
-                Cart = cart,
+                InitialOrder = await _db.Orders.FindByIdAsync(paymentRequest.InitialOrderId),
+                Customer = await _db.Customers
+                    .IncludeCustomerRoles()
+                    .FindByIdAsync(paymentRequest.CustomerId),
                 ExtraData = extraData,
                 PaymentRequest = paymentRequest
             };
 
             if (!paymentRequest.IsRecurringPayment)
             {
-                context.CartRequiresShipping = cart.IsShippingRequired();
+                ctx.Cart = await _shoppingCartService.GetCartAsync(ctx.Customer, ShoppingCartType.ShoppingCart, paymentRequest.StoreId);
+                ctx.BatchContext = _productService.CreateProductBatchContext(ctx.Cart.GetAllProducts(), null, ctx.Customer, false);
+                ctx.CartRequiresShipping = ctx.Cart.IsShippingRequired;
             }
             else
             {
-                context.CartRequiresShipping = initialOrder.ShippingStatus != ShippingStatus.ShippingNotRequired;
-                paymentRequest.PaymentMethodSystemName = initialOrder.PaymentMethodSystemName;
+                ctx.CartRequiresShipping = ctx.InitialOrder.ShippingStatus != ShippingStatus.ShippingNotRequired;
+                paymentRequest.PaymentMethodSystemName = ctx.InitialOrder.PaymentMethodSystemName;
+            }
+
+            var (warnings, _) = await ValidateOrderPlacementInternal(paymentRequest, ctx.InitialOrder, ctx.Customer, ctx.BatchContext);
+            if (warnings.Count > 0)
+            {
+                ctx.Result.Errors.AddRange(warnings);
+                return ctx.Result;
             }
 
             // Collect data for new order.
             // Also applies data (like order and tax total) to paymentRequest for payment processing below.
-            await ApplyCustomerData(context);
-            await ApplyPricingData(context);
+            await ApplyCustomerData(ctx);
+            await ApplyPricingData(ctx);
 
-            await ProcessPayment(context);
+            await ProcessPayment(ctx);
 
-            _db.Orders.Add(context.Order);
+            _db.Orders.Add(ctx.Order);
 
             // Save, we need the primary key.
             // Payment has been made. Order MUST be saved immediately!
             await _db.SaveChangesAsync();
 
-            context.Result.PlacedOrder = context.Order;
+            ctx.Result.PlacedOrder = ctx.Order;
 
             // Also applies data (like discounts) required for saving associated data.
-            await AddOrderItems(context);
-            await AddAssociatedData(context);
+            await AddOrderItems(ctx);
+            await AddAssociatedData(ctx);
 
             // Save order items.
             await _db.SaveChangesAsync();
 
             // Email messages, order notes etc.
-            await FinalizeOrderPlacement(context);
+            await FinalizeOrderPlacement(ctx);
 
             // Saves changes to database.
-            await CheckOrderStatusAsync(context.Order);
+            await CheckOrderStatusAsync(ctx.Order);
 
             // Events.
-            await _eventPublisher.PublishOrderPlacedAsync(context.Order);
+            await _eventPublisher.PublishOrderPlacedAsync(ctx.Order);
 
-            if (context.Order.PaymentStatus == PaymentStatus.Paid)
+            if (ctx.Order.PaymentStatus == PaymentStatus.Paid)
             {
-                await _eventPublisher.PublishOrderPaidAsync(context.Order);
+                await _eventPublisher.PublishOrderPaidAsync(ctx.Order);
             }
 
-            return result;
+            return ctx.Result;
         }
 
-        public virtual async Task<(IList<string> Warnings, ShoppingCart Cart)> ValidateOrderPlacementAsync(
+        public virtual Task<(IList<string> Warnings, ShoppingCart Cart)> ValidateOrderPlacementAsync(
             ProcessPaymentRequest paymentRequest,
             Order initialOrder = null,
             Customer customer = null)
+        {
+            return ValidateOrderPlacementInternal(paymentRequest, initialOrder, customer, null);
+        }
+
+        private async Task<(IList<string> Warnings, ShoppingCart Cart)> ValidateOrderPlacementInternal(
+            ProcessPaymentRequest paymentRequest,
+            Order initialOrder,
+            Customer customer,
+            ProductBatchContext batchContext)
         {
             Guard.NotNull(paymentRequest);
 
@@ -115,9 +120,9 @@ namespace Smartstore.Core.Checkout.Orders
 
             var warnings = new List<string>();
             ShoppingCart cart = null;
-            var skipPaymentWorkflow = false;
+            var paymentRequired = true;
             var isRecurringCart = false;
-            var paymentMethodSystemName = paymentRequest.PaymentMethodSystemName;
+            var paymentSystemName = paymentRequest.PaymentMethodSystemName;
 
             if (customer == null)
             {
@@ -126,7 +131,7 @@ namespace Smartstore.Core.Checkout.Orders
             }
 
             // Check whether guest checkout is allowed.
-            if (!_orderSettings.AnonymousCheckoutAllowed && customer.IsGuest())
+            if (!_orderSettings.AnonymousCheckoutAllowed && !customer.IsRegistered())
             {
                 warnings.Add(T("Checkout.AnonymousNotAllowed"));
                 return (warnings, cart);
@@ -136,12 +141,9 @@ namespace Smartstore.Core.Checkout.Orders
             {
                 cart = await _shoppingCartService.GetCartAsync(customer, ShoppingCartType.ShoppingCart, paymentRequest.StoreId);
 
-                if (paymentRequest.ShoppingCartItemIds.Any())
+                if (paymentRequest.ShoppingCartItemIds.Count > 0)
                 {
-                    cart = new ShoppingCart(cart.Customer, cart.StoreId, cart.Items.Where(x => paymentRequest.ShoppingCartItemIds.Contains(x.Item.Id)))
-                    {
-                        CartType = cart.CartType
-                    };
+                    cart = new ShoppingCart(cart, cart.Items.Where(x => paymentRequest.ShoppingCartItemIds.Contains(x.Item.Id)));
                 }
 
                 if (!cart.HasItems)
@@ -151,7 +153,7 @@ namespace Smartstore.Core.Checkout.Orders
                 }
 
                 await _shoppingCartValidator.ValidateCartAsync(cart, warnings, true);
-                if (warnings.Any())
+                if (warnings.Count > 0)
                 {
                     return (warnings, cart);
                 }
@@ -193,7 +195,7 @@ namespace Smartstore.Core.Checkout.Orders
                     warnings.Add(T("Checkout.MaxOrderSubtotalAmount", convertedMax.ToString(true)));
                 }
 
-                if (warnings.Any())
+                if (warnings.Count > 0)
                 {
                     return (warnings, cart);
                 }
@@ -207,30 +209,33 @@ namespace Smartstore.Core.Checkout.Orders
                     return (warnings, cart);
                 }
 
-                Money? cartTotal = await _orderCalculationService.GetShoppingCartTotalAsync(cart);
+                Money? cartTotal = await _orderCalculationService.GetShoppingCartTotalAsync(cart, batchContext: batchContext);
                 if (!cartTotal.HasValue)
                 {
                     warnings.Add(T("Order.CannotCalculateOrderTotal"));
                     return (warnings, cart);
                 }
 
-                skipPaymentWorkflow = cartTotal.Value == decimal.Zero;
+                paymentRequired = cartTotal.Value != decimal.Zero && cart.Requirements.HasFlag(CheckoutRequirements.Payment);
 
                 // Address validations.
-                if (customer.BillingAddress == null)
+                if (cart.Requirements.HasFlag(CheckoutRequirements.BillingAddress))
                 {
-                    warnings.Add(T("Order.BillingAddressMissing"));
-                }
-                else if (!customer.BillingAddress.Email.IsEmail())
-                {
-                    warnings.Add(T("Common.Error.InvalidEmail"));
-                }
-                else if (customer.BillingAddress.Country != null && !customer.BillingAddress.Country.AllowsBilling)
-                {
-                    warnings.Add(T("Order.CountryNotAllowedForBilling", customer.BillingAddress.Country.Name));
+                    if (customer.BillingAddress == null)
+                    {
+                        warnings.Add(T("Order.BillingAddressMissing"));
+                    }
+                    else if (!customer.BillingAddress.Email.IsEmail())
+                    {
+                        warnings.Add(T("Common.Error.InvalidEmail"));
+                    }
+                    else if (customer.BillingAddress.Country != null && !customer.BillingAddress.Country.AllowsBilling)
+                    {
+                        warnings.Add(T("Order.CountryNotAllowedForBilling", customer.BillingAddress.Country.GetLocalized(x => x.Name)));
+                    }
                 }
 
-                if (cart.IsShippingRequired())
+                if (cart.IsShippingRequired)
                 {
                     if (customer.ShippingAddress == null)
                     {
@@ -243,7 +248,7 @@ namespace Smartstore.Core.Checkout.Orders
                     }
                     else if (customer.ShippingAddress.Country != null && !customer.ShippingAddress.Country.AllowsShipping)
                     {
-                        warnings.Add(T("Order.CountryNotAllowedForShipping", customer.ShippingAddress.Country.Name));
+                        warnings.Add(T("Order.CountryNotAllowedForShipping", customer.ShippingAddress.Country.GetLocalized(x => x.Name)));
                     }
                 }
             }
@@ -261,15 +266,11 @@ namespace Smartstore.Core.Checkout.Orders
                     Total = new(initialOrder.OrderTotal, _primaryCurrency)
                 };
 
-                skipPaymentWorkflow = cartTotal.Total.Value == decimal.Zero;
-                paymentMethodSystemName = initialOrder.PaymentMethodSystemName;
+                paymentRequired = cartTotal.Total.Value != decimal.Zero && cart.Requirements.HasFlag(CheckoutRequirements.Payment);
+                paymentSystemName = initialOrder.PaymentMethodSystemName;
 
                 // Address validations.
-                if (initialOrder.BillingAddress == null)
-                {
-                    warnings.Add(T("Order.BillingAddressMissing"));
-                }
-                else if (initialOrder.BillingAddress.Country != null && !initialOrder.BillingAddress.Country.AllowsBilling)
+                if (initialOrder.BillingAddress?.Country != null && !initialOrder.BillingAddress.Country.AllowsBilling)
                 {
                     warnings.Add(T("Order.CountryNotAllowedForBilling", initialOrder.BillingAddress.Country.Name));
                 }
@@ -288,17 +289,14 @@ namespace Smartstore.Core.Checkout.Orders
             }
 
             // Payment.
-            if (!warnings.Any() && !skipPaymentWorkflow)
+            if (warnings.Count == 0 
+                && paymentRequired
+                && (paymentSystemName.IsEmpty() || !await _paymentService.IsPaymentProviderActiveAsync(paymentSystemName, cart, paymentRequest.StoreId)))
             {
-                var isPaymentMethodActive = await _paymentService.IsPaymentProviderActiveAsync(paymentMethodSystemName, cart, paymentRequest.StoreId);
-                if (!isPaymentMethodActive)
-                {
-                    warnings.Add(T("Payment.MethodNotAvailable"));
-                }
+                warnings.Add(T("Payment.MethodNotAvailable"));
             }
 
-            // Recurring or standard shopping cart?
-            if (!warnings.Any() && !paymentRequest.IsRecurringPayment)
+            if (warnings.Count == 0 && !paymentRequest.IsRecurringPayment)
             {
                 isRecurringCart = cart.ContainsRecurringItem();
                 if (isRecurringCart)
@@ -316,7 +314,7 @@ namespace Smartstore.Core.Checkout.Orders
             }
 
             // Validate recurring payment type.
-            if (!warnings.Any() && !skipPaymentWorkflow && !paymentRequest.IsMultiOrder)
+            if (warnings.Count == 0 && paymentRequired && !paymentRequest.IsMultiOrder)
             {
                 RecurringPaymentType? recurringPaymentType = isRecurringCart
                     ? await _paymentService.GetRecurringPaymentTypeAsync(paymentRequest.PaymentMethodSystemName)
@@ -457,8 +455,8 @@ namespace Smartstore.Core.Checkout.Orders
             if (!ctx.PaymentRequest.IsRecurringPayment)
             {
                 // Sub total.
-                var subTotalInclTax = await _orderCalculationService.GetShoppingCartSubtotalAsync(ctx.Cart, true);
-                var subTotalExclTax = await _orderCalculationService.GetShoppingCartSubtotalAsync(ctx.Cart, false);
+                var subTotalInclTax = await _orderCalculationService.GetShoppingCartSubtotalAsync(ctx.Cart, true, batchContext: ctx.BatchContext);
+                var subTotalExclTax = await _orderCalculationService.GetShoppingCartSubtotalAsync(ctx.Cart, false, batchContext: ctx.BatchContext);
 
                 order.OrderSubtotalInclTax = subTotalInclTax.SubtotalWithoutDiscount.Amount;
                 order.OrderSubtotalExclTax = subTotalExclTax.SubtotalWithoutDiscount.Amount;
@@ -491,7 +489,7 @@ namespace Smartstore.Core.Checkout.Orders
                 order.TaxRates = FormatTaxRates(taxRates);
 
                 // Order total.
-                ctx.CartTotal = await _orderCalculationService.GetShoppingCartTotalAsync(ctx.Cart);
+                ctx.CartTotal = await _orderCalculationService.GetShoppingCartTotalAsync(ctx.Cart, batchContext: ctx.BatchContext);
                 order.OrderTotal = ctx.CartTotal.Total.Value.Amount;
                 order.OrderTotalRounding = ctx.CartTotal.ToNearestRounding.Amount;
                 order.RefundedAmount = decimal.Zero;
@@ -535,33 +533,28 @@ namespace Smartstore.Core.Checkout.Orders
 
         private async Task ProcessPayment(PlaceOrderContext ctx)
         {
-            // Give payment processor the opportunity to fullfill billing address.
-            await _paymentService.PreProcessPaymentAsync(ctx.PaymentRequest);
-
             var result = new ProcessPaymentResult();
             var order = ctx.Order;
             var io = ctx.InitialOrder;
             var pr = ctx.PaymentRequest;
+            var billingAddressRequired = ctx.Cart.Requirements.HasFlag(CheckoutRequirements.BillingAddress);
+            var paymentRequired = ctx.CartTotal.Total.Value != decimal.Zero && ctx.Cart.Requirements.HasFlag(CheckoutRequirements.Payment);
 
-            if (!pr.IsRecurringPayment)
+            if (paymentRequired)
             {
-                order.BillingAddress = (Address)ctx.Customer.BillingAddress.Clone();
-                order.ShippingAddress = ctx.CartRequiresShipping ? (Address)ctx.Customer.ShippingAddress.Clone() : null;
+                // Give payment processor the opportunity to fullfill billing address.
+                await _paymentService.PreProcessPaymentAsync(pr);
             }
             else
-            {
-                order.BillingAddress = (Address)io.BillingAddress.Clone();
-                order.ShippingAddress = ctx.CartRequiresShipping ? (Address)io.ShippingAddress.Clone() : null;
-            }
-
-            var skipPaymentWorkflow = ctx.CartTotal.Total.Value == decimal.Zero;
-            if (skipPaymentWorkflow)
             {
                 pr.PaymentMethodSystemName = string.Empty;
             }
 
             if (!pr.IsRecurringPayment)
             {
+                order.BillingAddress = billingAddressRequired ? (Address)ctx.Customer.BillingAddress?.Clone() : null;
+                order.ShippingAddress = ctx.CartRequiresShipping ? (Address)ctx.Customer.ShippingAddress?.Clone() : null;
+
                 ctx.IsRecurringCart = ctx.Cart.ContainsRecurringItem();
                 if (ctx.IsRecurringCart)
                 {
@@ -573,11 +566,14 @@ namespace Smartstore.Core.Checkout.Orders
             }
             else
             {
+                order.BillingAddress = billingAddressRequired ? (Address)io.BillingAddress?.Clone() : null;
+                order.ShippingAddress = ctx.CartRequiresShipping ? (Address)io.ShippingAddress?.Clone() : null;
+                
                 ctx.IsRecurringCart = true;
             }
 
             // Process payment.
-            if (!skipPaymentWorkflow && !pr.IsMultiOrder)
+            if (paymentRequired && !pr.IsMultiOrder)
             {
                 if (!pr.IsRecurringPayment)
                 {
@@ -667,16 +663,14 @@ namespace Smartstore.Core.Checkout.Orders
             order.SubscriptionTransactionId = result.SubscriptionTransactionId;
             order.PurchaseOrderNumber = pr.PurchaseOrderNumber;
             order.PaymentStatus = result.NewPaymentStatus;
-            order.PaidDateUtc = null;
+            order.PaidDateUtc = result.NewPaymentStatus == PaymentStatus.Paid ? ctx.Now : null;
         }
 
         private async Task AddOrderItems(PlaceOrderContext ctx)
         {
             if (!ctx.PaymentRequest.IsRecurringPayment)
             {
-                var cartProducts = ctx.Cart.Items.Select(x => x.Item.Product).ToArray();
-                var batchContext = _productService.CreateProductBatchContext(cartProducts, null, ctx.Customer, false);
-                var calculationOptions = _priceCalculationService.CreateDefaultOptions(false, ctx.Customer, _primaryCurrency, batchContext);
+                var calculationOptions = _priceCalculationService.CreateDefaultOptions(false, ctx.Customer, _primaryCurrency, ctx.BatchContext);
 
                 foreach (var cartItem in ctx.Cart.Items)
                 {
@@ -736,18 +730,16 @@ namespace Smartstore.Core.Checkout.Orders
                     {
                         var bundleItemDataList = new List<ProductBundleItemOrderData>();
                         var childItems = cartItem.ChildItems.Where(x => x.Item.ProductId != 0 && x.Item.BundleItemId != 0).ToArray();
-                        var childBatchContext = _productService.CreateProductBatchContext(childItems.Select(x => x.Item.Product).ToArray(), null, ctx.Customer, false);
-                        var childCalculationOptions = _priceCalculationService.CreateDefaultOptions(false, ctx.Customer, _primaryCurrency, childBatchContext);
 
                         foreach (var childItem in childItems)
                         {
-                            var childCalculationContext = await _priceCalculationService.CreateCalculationContextAsync(childItem, childCalculationOptions);
+                            var childCalculationContext = await _priceCalculationService.CreateCalculationContextAsync(childItem, calculationOptions);
                             var (_, childSubtotal) = await _priceCalculationService.CalculateSubtotalAsync(childCalculationContext);
 
                             var attributesInfo = await _productAttributeFormatter.FormatAttributesAsync(
                                 childItem.Item.AttributeSelection,
                                 childItem.Item.Product,
-                                new ProductAttributeFormatOptions { IncludePrices = false },
+                                new() { IncludePrices = false },
                                 ctx.Customer);
 
                             var bundleItemData = childItem.Item.BundleItem.ToOrderData(childSubtotal.FinalPrice.Amount, childItem.Item.RawAttributes, attributesInfo);
@@ -866,7 +858,7 @@ namespace Smartstore.Core.Checkout.Orders
                 // Discount usage history.
                 foreach (var discount in ctx.AppliedDiscounts)
                 {
-                    _db.DiscountUsageHistory.Add(new DiscountUsageHistory
+                    _db.DiscountUsageHistory.Add(new()
                     {
                         DiscountId = discount.Id,
                         OrderId = order.Id,
@@ -877,7 +869,7 @@ namespace Smartstore.Core.Checkout.Orders
                 // Gift card usage history.
                 foreach (var giftCard in ctx.CartTotal.AppliedGiftCards)
                 {
-                    giftCard.GiftCard.GiftCardUsageHistory.Add(new GiftCardUsageHistory
+                    giftCard.GiftCard.GiftCardUsageHistory.Add(new()
                     {
                         GiftCardId = giftCard.GiftCard.Id,
                         UsedWithOrderId = order.Id,
@@ -890,7 +882,7 @@ namespace Smartstore.Core.Checkout.Orders
                 {
                     // Handle transiancy of uploaded files for checkout attributes.
                     var attributesSelection = ctx.Customer.GenericAttributes.CheckoutAttributes;
-                    if (attributesSelection.AttributesMap.Any())
+                    if (attributesSelection.HasAttributes)
                     {
                         var fileUploadAttributeIds = await _db.CheckoutAttributes
                             .AsQueryable()
@@ -898,7 +890,7 @@ namespace Smartstore.Core.Checkout.Orders
                             .Select(x => x.Id)
                             .ToListAsync();
 
-                        if (fileUploadAttributeIds.Any())
+                        if (fileUploadAttributeIds.Count > 0)
                         {
                             var fileGuids = attributesSelection.AttributesMap
                                 .Where(x => fileUploadAttributeIds.Contains(x.Key))
@@ -907,7 +899,7 @@ namespace Smartstore.Core.Checkout.Orders
                                 .Where(x => x != Guid.Empty)
                                 .ToArray();
 
-                            if (fileGuids.Any())
+                            if (fileGuids.Length > 0)
                             {
                                 var downloads = await _db.Downloads
                                     .AsQueryable()
@@ -956,7 +948,7 @@ namespace Smartstore.Core.Checkout.Orders
                 if (RecurringPaymentType.Manual == await _paymentService.GetRecurringPaymentTypeAsync(ctx.PaymentRequest.PaymentMethodSystemName))
                 {
                     // First payment.
-                    rp.RecurringPaymentHistory.Add(new RecurringPaymentHistory
+                    rp.RecurringPaymentHistory.Add(new()
                     {
                         CreatedOnUtc = ctx.Now,
                         OrderId = order.Id
@@ -1011,15 +1003,9 @@ namespace Smartstore.Core.Checkout.Orders
                 _activityLogger.LogActivity(KnownActivityLogTypes.PublicStorePlaceOrder, T("ActivityLog.PublicStore.PlaceOrder"), order.GetOrderNumber());
             }
 
-            // Reset checkout data.
             if (!ctx.PaymentRequest.IsRecurringPayment && !ctx.PaymentRequest.IsMultiOrder)
             {
                 ctx.Customer.ResetCheckoutData(ctx.PaymentRequest.StoreId, true, true, true, true, true, true);
-            }
-
-            // Clear shopping cart.
-            if (!ctx.PaymentRequest.IsRecurringPayment && !ctx.PaymentRequest.IsMultiOrder)
-            {
                 await _shoppingCartService.DeleteCartAsync(ctx.Cart, false);
             }
 
@@ -1029,18 +1015,19 @@ namespace Smartstore.Core.Checkout.Orders
         class PlaceOrderContext
         {
             public DateTime Now { get; } = DateTime.UtcNow;
-            public OrderPlacementResult Result { get; init; }
+            public OrderPlacementResult Result { get; } = new();
             public Order Order { get; } = new();
             public Order InitialOrder { get; init; }
             public Customer Customer { get; init; }
             public Dictionary<string, string> ExtraData { get; init; }
             public ProcessPaymentRequest PaymentRequest { get; init; }
-            public ShoppingCart Cart { get; init; }
+            public ShoppingCart Cart { get; set; }
+            public ProductBatchContext BatchContext { get; set; }
             public bool CartRequiresShipping { get; set; }
             public ShoppingCartTotal CartTotal { get; set; }
             public bool IsRecurringCart { get; set; }
 
-            public List<Discount> AppliedDiscounts { get; } = new();
+            public List<Discount> AppliedDiscounts { get; } = [];
 
             public void AddDiscount(Discount discount)
             {

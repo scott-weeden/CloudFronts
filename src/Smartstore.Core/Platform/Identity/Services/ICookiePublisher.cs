@@ -1,5 +1,4 @@
 ﻿using Smartstore.Core.Localization;
-using Smartstore.Utilities;
 
 namespace Smartstore.Core.Identity
 {
@@ -20,7 +19,7 @@ namespace Smartstore.Core.Identity
     public class CookieInfo : ILocalizedEntity, IDisplayedEntity
     {
         int ILocalizedEntity.Id
-            => Name.IsEmpty() ? 0 : (int)XxHashUnsafe.ComputeHash(Name);
+            => Name.IsEmpty() ? 0 : Name.GetHashCode();
 
         string INamedEntity.GetEntityName() 
             => nameof(CookieInfo);
@@ -53,12 +52,34 @@ namespace Smartstore.Core.Identity
     }
 
     /// <summary>
-    /// Type of the cookie.
+    /// Type of the cookie or consent.
     /// </summary>
+    [Flags]
     public enum CookieType
     {
-        Required,
-        Analytics,
-        ThirdParty
+        /// <summary>
+        /// Specifies that required cookies can be set.
+        /// </summary>
+        Required = 1,
+
+        /// <summary>
+        /// Specifies that analytical cookies can be set.
+        /// </summary>
+        Analytics = 1 << 1,
+
+        /// <summary>
+        /// Specifies that third party cookies can be set.
+        /// </summary>
+        ThirdParty = 1 << 2,
+
+        /// <summary>
+        /// Specifies that ad user data can be sent to third parties.
+        /// </summary>
+        ConsentAdUserData = 1 << 3,
+
+        /// <summary>
+        /// Specifies that ad personalization is desired by the user.
+        /// </summary>
+        ConsentAdPersonalization = 1 << 4
     }
 }

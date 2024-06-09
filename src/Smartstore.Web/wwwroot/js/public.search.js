@@ -5,7 +5,7 @@
     // ==========================================================
 
     $(function () {
-        $('form.instasearch-form').each(function () {
+        $('.instasearch-form').each(function () {
             let form = $(this),
                 box = form.find('.instasearch-term'),
                 addon = form.find('.instasearch-addon'),
@@ -14,6 +14,10 @@
 
             if (box.length == 0 || box.data('instasearch') === false)
                 return;
+
+            // INFO: if 'data-target' is specified, then JSON response is expected
+            // and the 'content' property contains the HTML (convention).
+            const target = $(box.data('target'));
 
             let drop = form.find('.instasearch-drop'),
                 logo = $('.shop-logo'),
@@ -38,7 +42,7 @@
 
             box.on('keydown', function (e) {
                 if (e.which === 13 /* Enter */) {
-                    if (keyNav && dropBody.find('.key-hover').length > 0) {
+                    if (target.length || (keyNav && dropBody.find('.key-hover').length > 0)) {
                         // Do not post form when key navigation is in progress
                         e.preventDefault();
                     }
@@ -87,27 +91,32 @@
                     box.addClass('busy');
                 }, 100)
 
-                // save last entered term in a global variable
+                // Save last entered term in a global variable.
                 lastTerm = term;
 
                 $.ajax({
-                    dataType: "html",
+                    dataType: target.length ? 'json' : 'html',
                     url: url,
                     data: { q: term },
                     type: 'POST',
                     //cache: true,
-                    success: function (html, status, req) {
+                    success: function (response, status, req) {
                         if (lastTerm !== term) {
                             // This is the result of a previous term. Get out!
                             return;
                         }
 
-                        if (!html || html.length === 0) {
+                        if (target.length) {
+                            target.html(response.content);
+                            target.trigger('updated');
+                            applyCommonPlugins(target);
+                        }
+                        else if (!response || response.length === 0) {
                             closeDrop();
                             dropBody.html('');
                         }
                         else {
-                            var markup = $(html);
+                            var markup = $(response);
                             var isMultiCol = markup.hasClass('instasearch-row');
                             drop.toggleClass('w-100', !isMultiCol);
                             dropBody.html(markup);

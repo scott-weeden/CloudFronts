@@ -1,13 +1,17 @@
 ﻿using Smartstore.Core.Catalog.Attributes;
 using Smartstore.Core.Catalog.Products;
+using Smartstore.Core.Catalog.Rules;
 using Smartstore.Core.Checkout.Attributes;
+using Smartstore.Core.Checkout.Cart.Events;
 using Smartstore.Core.Checkout.GiftCards;
 using Smartstore.Core.Common.Services;
 using Smartstore.Core.Data;
 using Smartstore.Core.Identity;
 using Smartstore.Core.Localization;
+using Smartstore.Core.Rules;
 using Smartstore.Core.Security;
 using Smartstore.Core.Stores;
+using Smartstore.Events;
 
 namespace Smartstore.Core.Checkout.Cart
 {
@@ -27,6 +31,8 @@ namespace Smartstore.Core.Checkout.Cart
         private readonly ILocalizationService _localizationService;
         private readonly IProductAttributeMaterializer _productAttributeMaterializer;
         private readonly ICheckoutAttributeMaterializer _checkoutAttributeMaterializer;
+        private readonly IRuleProviderFactory _ruleProviderFactory;
+        private readonly IEventPublisher _eventPublisher;
 
         public ShoppingCartValidator(
             SmartDbContext db,
@@ -39,7 +45,9 @@ namespace Smartstore.Core.Checkout.Cart
             IStoreMappingService storeMappingService,
             ILocalizationService localizationService,
             IProductAttributeMaterializer productAttributeMaterializer,
-            ICheckoutAttributeMaterializer checkoutAttributeMaterializer)
+            ICheckoutAttributeMaterializer checkoutAttributeMaterializer,
+            IRuleProviderFactory ruleProviderFactory,
+            IEventPublisher eventPublisher)
         {
             _db = db;
             _aclService = aclService;
@@ -52,6 +60,8 @@ namespace Smartstore.Core.Checkout.Cart
             _localizationService = localizationService;
             _productAttributeMaterializer = productAttributeMaterializer;
             _checkoutAttributeMaterializer = checkoutAttributeMaterializer;
+            _ruleProviderFactory = ruleProviderFactory;
+            _eventPublisher = eventPublisher;
         }
 
         public Localizer T { get; set; } = NullLocalizer.Instance;
@@ -155,7 +165,7 @@ namespace Smartstore.Core.Checkout.Cart
                 if (checkoutAttributes != null)
                 {
                     var existingAttributesQuery = _db.CheckoutAttributes.ApplyStoreFilter(_storeContext.CurrentStore.Id);
-                    if (!cart.IsShippingRequired())
+                    if (!cart.IsShippingRequired)
                     {
                         // No shipping required. Filter attributes which require shippable products.
                         existingAttributesQuery = existingAttributesQuery.Where(x => !x.ShippableProductRequired);
@@ -176,9 +186,12 @@ namespace Smartstore.Core.Checkout.Cart
                 }
             }
 
+            var validatingCartEvent = new ValidatingCartEvent(cart, warnings);
+            await _eventPublisher.PublishAsync(validatingCartEvent);
+
             warnings.AddRange(currentWarnings);
 
-            return currentWarnings.Count == 0;
+            return warnings.Count == 0;
         }
 
         public virtual async Task<bool> ValidateAddToCartItemAsync(AddToCartContext ctx, ShoppingCartItem cartItem, IEnumerable<OrganizedShoppingCartItem> cartItems)
@@ -469,7 +482,7 @@ namespace Smartstore.Core.Checkout.Cart
             IEnumerable<OrganizedShoppingCartItem> cartItems = null)
         {
             customer ??= _workContext.CurrentCustomer;
-            cartItems ??= Enumerable.Empty<OrganizedShoppingCartItem>();
+            cartItems ??= [];
 
             // Check if the product is a bundle. Since bundles have no attributes, the customer has nothing to select.
             if (product.ProductType == ProductType.BundledProduct ||
@@ -477,8 +490,6 @@ namespace Smartstore.Core.Checkout.Cart
             {
                 return true;
             }
-
-            var currentWarnings = new List<string>();
 
             // Get selected product variant attributes and check for product errors.
             var selectedAttributes = await _productAttributeMaterializer.MaterializeProductVariantAttributesAsync(selection);
@@ -491,23 +502,30 @@ namespace Smartstore.Core.Checkout.Cart
                 }
             }
 
-            await _db.LoadCollectionAsync(product, x => x.ProductVariantAttributes, false, q => q.Include(x => x.ProductAttribute));
+            // Check product variant attributes.
+            await _db.LoadCollectionAsync(product, x => x.ProductVariantAttributes, false, q => q
+                .Include(x => x.ProductAttribute)
+                .Include(x => x.ProductVariantAttributeValues)
+                .Include(x => x.RuleSet));
 
-            // Get existing product variant attributes.
-            foreach (var existingAttribute in product.ProductVariantAttributes)
+            var currentWarnings = new List<string>();
+            var selectedValues = await _productAttributeMaterializer.MaterializeProductVariantAttributeValuesAsync(selection);
+            var ruleProvider = _ruleProviderFactory.GetProvider<IAttributeRuleProvider>(RuleScope.ProductAttribute, new AttributeRuleProviderContext(product.Id));
+
+            foreach (var attribute in product.ProductVariantAttributes)
             {
-                if (!existingAttribute.IsRequired)
+                if (!attribute.IsRequired || !await ruleProvider.IsAttributeActiveAsync(new(product, attribute, selectedValues)))
                 {
                     continue;
                 }
 
                 var found = false;
 
-                foreach (var attribute in selectedAttributes)
+                foreach (var pva in selectedAttributes)
                 {
-                    if (attribute.Id == existingAttribute.Id)
+                    if (pva.Id == attribute.Id)
                     {
-                        var values = selection.GetAttributeValues(attribute.Id) ?? Enumerable.Empty<object>();
+                        var values = selection.GetAttributeValues(pva.Id) ?? [];
                         foreach (var value in values)
                         {
                             var strValue = value?.ToString().EmptyNull();
@@ -526,8 +544,9 @@ namespace Smartstore.Core.Checkout.Cart
                 }
 
                 if (!found &&
-                    (bundleItem?.FilterAttributes ?? false) &&
-                    !bundleItem.AttributeFilters.Any(x => x.AttributeId == existingAttribute.ProductAttributeId))
+                    bundleItem != null &&
+                    bundleItem.FilterAttributes &&
+                    !bundleItem.AttributeFilters.Any(x => x.AttributeId == attribute.Id))
                 {
                     // Attribute is filtered out by bundle item. It cannot be selected by the customer.
                     found = true;
@@ -536,8 +555,8 @@ namespace Smartstore.Core.Checkout.Cart
                 if (!found)
                 {
                     currentWarnings.Add(GetAttributeRequiredWarning(
-                        existingAttribute.AttributeControlType,
-                        existingAttribute.TextPrompt.NullEmpty() ?? existingAttribute.ProductAttribute.GetLocalized(x => x.Name)));
+                        attribute.AttributeControlType,
+                        attribute.TextPrompt.NullEmpty() ?? attribute.ProductAttribute.GetLocalized(x => x.Name)));
                 }
             }
 
@@ -549,14 +568,15 @@ namespace Smartstore.Core.Checkout.Cart
 
             // Checks whether there is an active selected attribute combination.
             var combination = await _productAttributeMaterializer.FindAttributeCombinationAsync(product.Id, selection);
-            if (combination != null && !combination.IsActive)
+            if ((combination != null && !combination.IsActive) ||
+                (combination == null && product.AttributeCombinationRequired && product.ProductVariantAttributes.Count > 0))
             {
-                currentWarnings.Add(T("ShoppingCart.NotAvailable"));
+                // INFO: warning on the shopping cart page if the cart contains a variant that has become unavailable in the meantime.
+                warnings.Add(T("ShoppingCart.NotAvailableVariant"));
+                return false;
             }
 
-            var attributeValues = await _productAttributeMaterializer.MaterializeProductVariantAttributeValuesAsync(selection);
-
-            var productLinkageValues = attributeValues
+            var productLinkageValues = selectedValues
                 .Where(x => x.ValueType == ProductVariantAttributeValueType.ProductLinkage)
                 .ToArray();
 
@@ -568,7 +588,7 @@ namespace Smartstore.Core.Checkout.Cart
 
             var linkedProducts = linkedProductIds.Length > 0
                 ? await _db.Products.AsNoTracking().Where(x => linkedProductIds.Contains(x.Id)).ToDictionaryAsync(x => x.Id)
-                : new Dictionary<int, Product>();
+                : [];
 
             // Validate each linked product, create shopping cart item from linked product and run validation.
             foreach (var value in productLinkageValues)

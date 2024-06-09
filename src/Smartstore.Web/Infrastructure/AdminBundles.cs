@@ -60,7 +60,8 @@ namespace Smartstore.Web.Infrastructure
                 lib + "pnotify/js/pnotify.mobile.js",
                 lib + "pnotify/js/pnotify.buttons.js",
                 lib + "pnotify/js/pnotify.animate.js",
-                lib + "bootstrap/js/bootstrap.bundle.js",
+                lib + "popper/popper.js",
+                lib + "bootstrap/js/bootstrap.js",
                 // Common
                 js + "underscore.mixins.js",
                 js + "smartstore.system.js",
@@ -72,6 +73,7 @@ namespace Smartstore.Web.Infrastructure
                 js + "smartstore.ajax.js",
                 js + "smartstore.eventbroker.js",
                 js + "smartstore.common.js",
+                js + "smartstore.globalinit.js",
                 js + "smartstore.tabs.js",
                 js + "smartstore.dialogs.js",
                 js + "smartstore.selectwrapper.js",
@@ -86,7 +88,8 @@ namespace Smartstore.Web.Infrastructure
                 // Admin
                 adminJs + "admin.common.js",
                 adminJs + "admin.media.js",
-                adminJs + "admin.globalinit.js"));
+                adminJs + "admin.globalinit.js",
+                adminJs + "admin.ai.js"));
 
 
             /* Chart.js --> /bundle/js/chart.js

@@ -1,7 +1,9 @@
 ﻿using System.Dynamic;
 using Smartstore.ComponentModel;
+using Smartstore.Core.Checkout.Cart;
+using Smartstore.Core.Checkout.Orders;
 using Smartstore.Core.Localization;
-using Smartstore.Web.Models.Checkout;
+using Smartstore.Core.Stores;
 using Smartstore.Web.Models.Common;
 using Smartstore.Web.Rendering;
 
@@ -9,7 +11,17 @@ namespace Smartstore.Web.Models.Checkout
 {
     public static partial class CheckoutAddressMappingExtensions
     {
-        public static async Task MapAsync(this IEnumerable<Address> entity,
+        public static async Task<CheckoutAddressModel> MapAddressesAsync(this CheckoutContext context,
+            bool shipping,
+            int? selectedCountryId = null)
+        {
+            var model = new CheckoutAddressModel();
+            await context.MapAddressesAsync(model, shipping, selectedCountryId);
+
+            return model;
+        }
+
+        public static async Task MapAddressesAsync(this CheckoutContext context,
             CheckoutAddressModel model,
             bool shipping,
             int? selectedCountryId)
@@ -18,60 +30,73 @@ namespace Smartstore.Web.Models.Checkout
             parameters.SelectedCountryId = selectedCountryId;
             parameters.Shipping = shipping;
 
-            await MapperFactory.MapAsync(entity, model, parameters);
+            await MapperFactory.MapAsync(context, model, parameters);
         }
     }
 
-    public class CheckoutAddressMapper : Mapper<IEnumerable<Address>, CheckoutAddressModel>
+    public class CheckoutAddressMapper : Mapper<CheckoutContext, CheckoutAddressModel>
     {
         private readonly SmartDbContext _db;
-        private readonly ICommonServices _services;
+        private readonly IStoreContext _storeContext;
+        private readonly IWorkContext _workContext;
+        private readonly IShoppingCartService _shoppingCartService;
+        private readonly ICheckoutFactory _checkoutFactory;
 
-        public CheckoutAddressMapper(SmartDbContext db, ICommonServices services)
+        public CheckoutAddressMapper(
+            SmartDbContext db,
+            IStoreContext storeContext,
+            IWorkContext workContext,
+            IShoppingCartService shoppingCartService,
+            ICheckoutFactory checkoutFactory)
         {
             _db = db;
-            _services = services;
+            _storeContext = storeContext;
+            _workContext = workContext;
+            _shoppingCartService = shoppingCartService;
+            _checkoutFactory = checkoutFactory;
         }
 
         public Localizer T { get; set; } = NullLocalizer.Instance;
 
-        protected override void Map(IEnumerable<Address> from, CheckoutAddressModel to, dynamic parameters = null)
+        protected override void Map(CheckoutContext from, CheckoutAddressModel to, dynamic parameters = null)
             => throw new NotImplementedException();
 
-        public override async Task MapAsync(IEnumerable<Address> from, CheckoutAddressModel to, dynamic parameters = null)
+        public override async Task MapAsync(CheckoutContext from, CheckoutAddressModel to, dynamic parameters = null)
         {
-            Guard.NotNull(to, nameof(to));
+            Guard.NotNull(to);
 
             var shipping = parameters?.Shipping == true;
             var selectedCountryId = parameters?.SelectedCountryId as int?;
+            var cart = from.Cart;
+            var addresses = cart.Customer.Addresses.Where(x => x.Country == null || (shipping ? x.Country.AllowsShipping : x.Country.AllowsBilling));
 
-            from = shipping
-                ? from.Where(x => x.Country == null || x.Country.AllowsShipping)
-                : from.Where(x => x.Country == null || x.Country.AllowsBilling);
-
-            foreach (var address in from)
+            foreach (var address in addresses)
             {
                 to.ExistingAddresses.Add(await address.MapAsync());
             }
 
+            to.ActionName = shipping ? CheckoutActionNames.ShippingAddress : CheckoutActionNames.BillingAddress;
+            to.PreviousStepUrl = _checkoutFactory.GetNextCheckoutStepUrl(from, false);
+            to.IsShippingRequired = cart.IsShippingRequired;
+
             // New address.
-            var countriesQuery = _db.Countries.AsNoTracking();
-
-            countriesQuery = shipping
-                ? countriesQuery.Where(x => x.AllowsShipping)
-                : countriesQuery.Where(x => x.AllowsBilling);
-
-            var countries = await countriesQuery
-                .ApplyStandardFilter(false, _services.StoreContext.CurrentStore.Id)
-                .ToListAsync();
-
             await new Address().MapAsync(to.NewAddress);
 
             to.NewAddress.CountryId = selectedCountryId;
-            to.NewAddress.Email = _services.WorkContext.CurrentCustomer.Email;
+            to.NewAddress.Email = _workContext.CurrentCustomer.Email;
 
             if (to.NewAddress.CountryEnabled)
             {
+                var countriesQuery = _db.Countries.AsNoTracking();
+
+                countriesQuery = shipping
+                    ? countriesQuery.Where(x => x.AllowsShipping)
+                    : countriesQuery.Where(x => x.AllowsBilling);
+
+                var countries = await countriesQuery
+                    .ApplyStandardFilter(false, _storeContext.CurrentStore.Id)
+                    .ToListAsync();
+
                 to.NewAddress.AvailableCountries = countries.ToSelectListItems(selectedCountryId ?? 0);
             }
         }

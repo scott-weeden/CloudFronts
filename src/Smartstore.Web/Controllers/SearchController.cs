@@ -5,6 +5,7 @@ using Smartstore.Core.Content.Media;
 using Smartstore.Core.Localization;
 using Smartstore.Core.Localization.Routing;
 using Smartstore.Core.Seo;
+using Smartstore.Core.Seo.Routing;
 using Smartstore.Web.Models.Catalog;
 using Smartstore.Web.Models.Search;
 
@@ -98,6 +99,7 @@ namespace Smartstore.Web.Controllers
             return PartialView(model);
         }
 
+        [DisallowRobot]
         [LocalizedRoute("/search", Name = "Search")]
         public async Task<IActionResult> Search(CatalogSearchQuery query)
         {
@@ -105,7 +107,7 @@ namespace Smartstore.Web.Controllers
             var model = new SearchResultModel(query);
             var term = query?.DefaultTerm;
 
-            if (term == null || term.Length < _searchSettings.InstantSearchTermMinLength)
+            if ((term == null || term.Length < _searchSettings.InstantSearchTermMinLength) && !query.HasSelectedFacets)
             {
                 model.SearchResult = new CatalogSearchResult(query);
                 model.TopProducts = ProductSummaryModel.Empty;

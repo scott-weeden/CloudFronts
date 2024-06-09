@@ -183,6 +183,7 @@ namespace Smartstore.Web.Controllers
             return RedirectToReferrer(returnUrl);
         }
 
+        [DisallowRobot]
         [LocalizedRoute("/currency-selected/{customerCurrency:int}", Name = "ChangeCurrency")]
         public async Task<IActionResult> CurrencySelected(int customerCurrency, string returnUrl = null)
         {
@@ -198,6 +199,7 @@ namespace Smartstore.Web.Controllers
         }
 
         [CheckStoreClosed(false)]
+        [DisallowRobot]
         [LocalizedRoute("/set-language/{langid:int}", Name = "ChangeLanguage")]
         public async Task<IActionResult> SetLanguage(int langid, string returnUrl = "")
         {
@@ -269,9 +271,11 @@ namespace Smartstore.Web.Controllers
             {
                 model.AnalyticsConsent = true;
                 model.ThirdPartyConsent = true;
+                model.AdUserDataConsent = true;
+                model.AdPersonalizationConsent = true;
             }
 
-            _cookieConsentManager.SetConsentCookie(model.AnalyticsConsent, model.ThirdPartyConsent);
+            _cookieConsentManager.SetConsentCookie(model.AnalyticsConsent, model.ThirdPartyConsent, model.AdUserDataConsent, model.AdPersonalizationConsent);
 
             if (!HttpContext.Request.IsAjax())
             {

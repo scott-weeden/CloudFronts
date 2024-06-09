@@ -15,7 +15,6 @@ using Smartstore.Core.Catalog.Search;
 using Smartstore.Core.Catalog.Search.Modelling;
 using Smartstore.Core.DataExchange;
 using Smartstore.Core.DataExchange.Import;
-using Smartstore.Core.Rules;
 using Smartstore.Core.Rules.Rendering;
 using Smartstore.Core.Search;
 using Smartstore.Core.Search.Facets;
@@ -39,11 +38,6 @@ namespace Smartstore.Core.Bootstrapping
             builder.RegisterType<ManufacturerService>()
                 .As<IManufacturerService>()
                 .As<IXmlSitemapPublisher>()
-                .InstancePerLifetimeScope();
-
-            builder.RegisterType<ProductRuleProvider>()
-                .As<IProductRuleProvider>()
-                .Keyed<IRuleProvider>(RuleScope.Product)
                 .InstancePerLifetimeScope();
 
             builder.RegisterType<ProductAttributeMaterializer>().As<IProductAttributeMaterializer>().InstancePerLifetimeScope();
@@ -71,6 +65,17 @@ namespace Smartstore.Core.Bootstrapping
             builder.RegisterType<CatalogSearchQueryAliasMapper>().As<ICatalogSearchQueryAliasMapper>().InstancePerLifetimeScope();
             builder.RegisterType<CatalogFacetUrlHelper>().As<IFacetUrlHelper>().InstancePerLifetimeScope();
 
+            // Pricing
+            builder.RegisterType<PriceCalculationService>().As<IPriceCalculationService>().InstancePerLifetimeScope();
+            builder.RegisterType<PriceCalculatorFactory>().As<IPriceCalculatorFactory>().InstancePerLifetimeScope();
+            builder.RegisterType<PriceLabelService>().As<IPriceLabelService>().InstancePerLifetimeScope();
+
+            DiscoverCalculators(builder, appContext);
+
+            // Rules.
+            builder.RegisterType<ProductRuleProvider>().As<IProductRuleProvider>().InstancePerLifetimeScope();
+            builder.RegisterType<NullAttributeRuleProvider>().As<IAttributeRuleProvider>().InstancePerLifetimeScope();
+
             // Rule options provider.
             builder.RegisterType<ProductVariantAttributeValueRuleOptionsProvider>().As<IRuleOptionsProvider>().InstancePerLifetimeScope();
             builder.RegisterType<SpecificationAttributeOptionRuleOptionsProvider>().As<IRuleOptionsProvider>().InstancePerLifetimeScope();
@@ -78,16 +83,9 @@ namespace Smartstore.Core.Bootstrapping
             builder.RegisterType<CategoryRuleOptionsProvider>().As<IRuleOptionsProvider>().InstancePerLifetimeScope();
             builder.RegisterType<ProductRuleOptionsProvider>().As<IRuleOptionsProvider>().InstancePerLifetimeScope();
             builder.RegisterType<ProductTagRuleOptionsProvider>().As<IRuleOptionsProvider>().InstancePerLifetimeScope();
-
-            // Pricing
-            builder.RegisterType<PriceCalculationService>().As<IPriceCalculationService>().InstancePerLifetimeScope();
-            builder.RegisterType<PriceCalculatorFactory>().As<IPriceCalculatorFactory>().InstancePerLifetimeScope();
-            builder.RegisterType<PriceLabelService>().As<IPriceLabelService>().InstancePerLifetimeScope();
-
-            DiscoverCalculators(builder, appContext);
         }
 
-        private void DiscoverCalculators(ContainerBuilder builder, IApplicationContext appContext)
+        private static void DiscoverCalculators(ContainerBuilder builder, IApplicationContext appContext)
         {
             var calculatorTypes = appContext.TypeScanner.FindTypes<IPriceCalculator>();
 

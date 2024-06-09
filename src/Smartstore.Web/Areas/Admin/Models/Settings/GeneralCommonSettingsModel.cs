@@ -187,6 +187,9 @@ namespace Smartstore.Admin.Models
             [LocalizedDisplay("*CaptchaShowOnRegistrationPage")]
             public bool ShowOnRegistrationPage { get; set; }
 
+            [LocalizedDisplay("*ShowOnPasswordRecoveryPage")]
+            public bool ShowOnPasswordRecoveryPage { get; set; }
+
             [LocalizedDisplay("*CaptchaShowOnContactUsPage")]
             public bool ShowOnContactUsPage { get; set; }
 
@@ -261,6 +264,9 @@ namespace Smartstore.Admin.Models
 
             [LocalizedDisplay("*DisplayRegionInLanguageSelector")]
             public bool DisplayRegionInLanguageSelector { get; set; }
+
+            [LocalizedDisplay("*UseNativeNameInLanguageSelector")]
+            public bool UseNativeNameInLanguageSelector { get; set; }
         }
 
         [LocalizedDisplay("Admin.Configuration.Settings.GeneralCommon.CompanyInformationSettings.")]

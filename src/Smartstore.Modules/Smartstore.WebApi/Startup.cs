@@ -47,14 +47,28 @@ namespace Smartstore.Web.Api
                 o.Conventions.Add(new ApiControllerModelConvention());
             });
 
+            services.AddCors(o => o.AddPolicy("WebApiCorsPolicy", policy =>
+            {
+                // Disallow OPTIONS method for preflight requests. Would result in:
+                // "Method PATCH is not allowed by Access-Control-Allow-Methods in preflight response".
+                policy
+                    .AllowAnyOrigin()
+                    .AllowAnyHeader()
+                    .WithMethods("GET", "POST", "PUT", "PATCH", "DELETE");
+            }));
+
             services.AddSwaggerGen(o =>
             {
-                // INFO: "name" equals ApiExplorer.GroupName. Must be globally unique, URI-friendly and should be in lower case.
-                o.SwaggerDoc("webapi1", new OpenApiInfo
+                foreach (var name in WebApiGroupNames.All)
                 {
-                    Version = "1",
-                    Title = "Smartstore Web API"
-                });
+                    var humanized = OpenApiUtility.GetDocumentName(name);
+                    o.SwaggerDoc(name + '1', new()
+                    {
+                        Version = $"{humanized} 1",
+                        Title = "Smartstore Web API - " + humanized,
+                        Description = $"A reference of all endpoints of the Smartstore Web API section **{humanized}**."
+                    });
+                }
 
                 // INFO: required workaround to avoid conflict errors for identical action names such as "Get" when opening swagger UI.
                 // Alternative: set-up a path template for each (!) OData action method.
@@ -63,8 +77,7 @@ namespace Smartstore.Web.Api
                 //o.IgnoreObsoleteActions();
                 //o.IgnoreObsoleteProperties();
 
-                // Avoids "Conflicting schemaIds" (multiple types with the same name but different namespaces).
-                o.CustomSchemaIds(type => type.GetFriendlyId(true));
+                o.CustomSchemaIds(type => OpenApiUtility.GetSchemaId(type, true));
 
                 o.AddSecurityDefinition("Basic", new OpenApiSecurityScheme
                 {
@@ -72,7 +85,7 @@ namespace Smartstore.Web.Api
                     Type = SecuritySchemeType.Http,
                     Scheme = "Basic",
                     In = ParameterLocation.Header,
-                    Description = "Please enter your public and private API key."
+                    Description = "Please enter your public and secret API key."
                 });
 
                 o.AddSecurityRequirement(new OpenApiSecurityRequirement
@@ -90,9 +103,7 @@ namespace Smartstore.Web.Api
                     }
                 });
 
-                // INFO: provide unique OperationId. By default ApiDescription.RelativePath is used but that is not unique.
-                // Prevents multiple descriptions from opening at the same time when clicking a method.
-                o.CustomOperationIds(x => x.HttpMethod.ToLower().Grow(x.RelativePath, "/"));
+                o.CustomOperationIds(OpenApiUtility.GetOperationId);
 
                 // Ordering within a group does not work. See https://github.com/domaindrivendev/Swashbuckle.AspNetCore/issues/401
                 //o.OrderActionsBy(x => ...);
@@ -100,7 +111,7 @@ namespace Smartstore.Web.Api
                 // Filters.
                 o.DocumentFilter<SwaggerDocumentFilter>();
                 o.OperationFilter<SwaggerOperationFilter>();
-                //o.SchemaFilter<SwaggerSchemaFilter>();
+                o.SchemaFilter<SwaggerSchemaFilter>();
 
                 //o.MapType<decimal>(() => new OpenApiSchema
                 //{
@@ -148,7 +159,11 @@ namespace Smartstore.Web.Api
 
                     app.UseSwaggerUI(o =>
                     {
-                        o.SwaggerEndpoint($"webapi1/swagger.json", "Web API");
+                        foreach (var name in WebApiGroupNames.All)
+                        {
+                            o.SwaggerEndpoint($"{name}1/swagger.json", OpenApiUtility.GetDocumentName(name));
+                        }
+
                         o.RoutePrefix = routePrefix;
 
                         // Only show schemas dropdown for developers.
@@ -200,6 +215,12 @@ namespace Smartstore.Web.Api
 
                     // If you want to use /$openapi, enable the middleware.
                     //app.UseODataOpenApi();
+                });
+
+                builder.Configure(StarterOrdering.AfterRoutingMiddleware, app =>
+                {
+                    // Must be called after app.UseRouting and before app.UseEndpoints, UseAuthorization, UseResponseCaching ;-)
+                    app.UseCors();
                 });
 
                 builder.Configure(StarterOrdering.AfterWorkContextMiddleware, app =>
@@ -264,7 +285,7 @@ namespace Smartstore.Web.Api
             }
         }
 
-        private static Stream GetXmlCommentsStream(IApplicationContext appContext, string fileName)
+        private static FileStream GetXmlCommentsStream(IApplicationContext appContext, string fileName)
         {
             var path = Path.Combine(appContext.RuntimeInfo.BaseDirectory, fileName);
             if (File.Exists(path))

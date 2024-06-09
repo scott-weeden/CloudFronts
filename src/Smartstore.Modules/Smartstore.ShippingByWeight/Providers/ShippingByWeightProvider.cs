@@ -53,11 +53,9 @@ namespace Smartstore.Shipping
             _workContext = workContext;
             _storeContext = storeContext;
             _shippingByWeightSettings = shippingByWeightSettings;
-
-            T = NullLocalizer.Instance;
         }
 
-        public Localizer T { get; set; }
+        public Localizer T { get; set; } = NullLocalizer.Instance;
 
         /// <summary>
         /// Gets the rate for the shipping method based on total weight of the order.
@@ -138,16 +136,13 @@ namespace Smartstore.Shipping
         public RouteInfo GetConfigurationRoute()
             => new("Configure", "ShippingByWeight", new { area = "Admin" });
 
-        public Task<decimal?> GetFixedRateAsync(ShippingOptionRequest request)
-            => Task.FromResult<decimal?>(null);
-
         public async Task<ShippingOptionResponse> GetShippingOptionsAsync(ShippingOptionRequest request)
         {
             Guard.NotNull(request);
 
             var response = new ShippingOptionResponse();
 
-            if (request.Items == null || request.Items.Count == 0)
+            if (request.Items.IsNullOrEmpty())
             {
                 response.Errors.Add(T("Admin.System.Warnings.NoShipmentItems"));
                 return response;
@@ -193,7 +188,7 @@ namespace Smartstore.Shipping
 
             var cart = new ShoppingCart(request.Customer, request.StoreId, request.Items);
             var weight = await _shippingService.GetCartTotalWeightAsync(cart, _shippingByWeightSettings.IncludeWeightOfFreeShippingProducts);
-            var shippingMethods = await _shippingService.GetAllShippingMethodsAsync(request.StoreId, true);
+            var shippingMethods = await _shippingService.GetAllShippingMethodsAsync(request.StoreId, request.MatchRules);
 
             currentSubTotal = _workContext.TaxDisplayType == TaxDisplayType.ExcludingTax
                 ? subTotalExclTax

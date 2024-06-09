@@ -1,27 +1,24 @@
-﻿using Microsoft.AspNetCore.OData.Formatter;
-using System.ComponentModel.DataAnnotations;
+﻿using System.ComponentModel.DataAnnotations;
+using Microsoft.AspNetCore.OData.Formatter;
 using Smartstore.Core.Catalog.Categories;
 using Smartstore.Core.Catalog.Discounts;
 using Smartstore.Core.Content.Media;
-using Smartstore.Core.Seo;
 
 namespace Smartstore.Web.Api.Controllers
 {
     /// <summary>
     /// The endpoint for operations on Category entity.
     /// </summary>
+    [WebApiGroup(WebApiGroupNames.Catalog)]
     public class CategoriesController : WebApiController<Category>
     {
-        private readonly Lazy<IUrlService> _urlService;
         private readonly Lazy<ICategoryService> _categoryService;
         private readonly Lazy<IDiscountService> _discountService;
 
         public CategoriesController(
-            Lazy<IUrlService> urlService,
             Lazy<ICategoryService> categoryService,
             Lazy<IDiscountService> discountService)
         {
-            _urlService = urlService;
             _categoryService = categoryService;
             _discountService = discountService;
         }
@@ -61,7 +58,7 @@ namespace Smartstore.Web.Api.Controllers
             return PostAsync(model, async () =>
             {
                 await Db.SaveChangesAsync();
-                await UpdateSlug(model);
+                await UpdateSlugAsync(model);
             });
         }
 
@@ -72,7 +69,7 @@ namespace Smartstore.Web.Api.Controllers
             return PutAsync(key, model, async (entity) =>
             {
                 await Db.SaveChangesAsync();
-                await UpdateSlug(entity);
+                await UpdateSlugAsync(entity);
             });
         }
 
@@ -83,7 +80,7 @@ namespace Smartstore.Web.Api.Controllers
             return PatchAsync(key, model, async (entity) =>
             {
                 await Db.SaveChangesAsync();
-                await UpdateSlug(entity);
+                await UpdateSlugAsync(entity);
             });
         }
 
@@ -127,12 +124,6 @@ namespace Smartstore.Web.Api.Controllers
             {
                 return ErrorResult(ex);
             }
-        }
-
-        private async Task UpdateSlug(Category entity)
-        {
-            var slugResult = await _urlService.Value.ValidateSlugAsync(entity, string.Empty, true);
-            await _urlService.Value.ApplySlugAsync(slugResult, true);
         }
     }
 }

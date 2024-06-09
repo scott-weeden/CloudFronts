@@ -59,7 +59,8 @@ namespace Smartstore.Admin.Controllers
         private readonly MeasureSettings _measureSettings;
         private readonly IHostApplicationLifetime _appLifetime;
         private readonly AsyncRunner _asyncRunner;
-
+        private readonly IMediaService _mediaService;
+        
         public MaintenanceController(
             SmartDbContext db,
             IMemoryCache memCache,
@@ -79,7 +80,8 @@ namespace Smartstore.Admin.Controllers
             Lazy<UpdateChecker> updateChecker,
             MeasureSettings measureSettings,
             IHostApplicationLifetime appLifetime,
-            AsyncRunner asyncRunner)
+            AsyncRunner asyncRunner,
+            IMediaService mediaService)
         {
             _db = db;
             _memCache = memCache;
@@ -100,6 +102,7 @@ namespace Smartstore.Admin.Controllers
             _measureSettings = measureSettings;
             _appLifetime = appLifetime;
             _asyncRunner = asyncRunner;
+            _mediaService = mediaService;
         }
 
         #region Maintenance
@@ -220,6 +223,7 @@ namespace Smartstore.Admin.Controllers
             return RedirectToAction("Index");
         }
 
+        [MaintenanceAction]
         [Permission(Permissions.System.Maintenance.Execute)]
         public async Task<IActionResult> OffloadEmbeddedImages(int take = 200)
         {
@@ -247,6 +251,15 @@ namespace Smartstore.Admin.Controllers
             return Content(message);
         }
 
+        [MaintenanceAction]
+        [Permission(Permissions.System.Maintenance.Execute)]
+        public async Task<IActionResult> ReInitMediaFileNames(string folderName = "")
+        {
+            var numProcessed = await _mediaService.EnsureMetadataResolvedAsync(folderName);
+            return Content($"{numProcessed} files have been processed.");
+        }
+
+        [MaintenanceAction]
         [Permission(Permissions.System.Maintenance.Execute)]
         public async Task<string> RebuildTreePaths()
         {
@@ -254,6 +267,7 @@ namespace Smartstore.Admin.Controllers
             return T("Admin.System.Maintenance.TreePaths.PathCount", numRebuilt);
         }
 
+        [MaintenanceAction]
         [Permission(Permissions.System.Maintenance.Execute)]
         public IActionResult CreateAttributeCombinationHashCodes()
         {
@@ -399,7 +413,7 @@ namespace Smartstore.Admin.Controllers
             // DB table infos
             if (dataProvider.CanReadTableInfo)
             {
-                model.DbTableInfos = await CommonHelper.TryAction(() => dataProvider.ReadTableInfosAsync(), new List<DbTableInfo>());
+                model.DbTableInfos = await CommonHelper.TryAction(() => dataProvider.ReadTableInfosAsync(), []);
             }
 
             // Used RAM
@@ -408,8 +422,10 @@ namespace Smartstore.Admin.Controllers
             // DB settings
             if (DataSettings.Instance.IsValid())
             {
+                var allowExec = Services.Permissions.Authorize(Permissions.System.Maintenance.Execute);
                 model.DataProviderFriendlyName = dataProvider.ProviderFriendlyName;
-                model.ShrinkDatabaseEnabled = dataProvider.CanShrink && Services.Permissions.Authorize(Permissions.System.Maintenance.Read);
+                model.OptimizeDatabaseEnabled = dataProvider.CanOptimizeDatabase && allowExec;
+                model.OptimizeTableEnabled = dataProvider.CanOptimizeTable && allowExec;
             }
 
             // Loaded assemblies
@@ -483,14 +499,52 @@ namespace Smartstore.Admin.Controllers
         }
 
         [Permission(Permissions.System.Maintenance.Execute)]
-        public async Task<IActionResult> ShrinkDatabase()
+        public async Task<IActionResult> OptimizeDatabase()
         {
             try
             {
-                if (_db.DataProvider.CanShrink)
+                if (_db.DataProvider.CanOptimizeDatabase)
                 {
-                    await _db.DataProvider.ShrinkDatabaseAsync(false);
+                    await _db.DataProvider.OptimizeDatabaseAsync();
                     NotifySuccess(T("Common.ShrinkDatabaseSuccessful"));
+                }
+            }
+            catch (Exception ex)
+            {
+                NotifyError(ex);
+            }
+
+            return RedirectToReferrer();
+        }
+
+        [Permission(Permissions.System.Maintenance.Execute)]
+        public async Task<IActionResult> OptimizeTable(string tableName, long? size = null)
+        {
+            try
+            {
+                if (_db.DataProvider.CanOptimizeTable)
+                {
+                    await _db.DataProvider.OptimizeTableAsync(tableName);
+                    
+                    var tableInfos = await CommonHelper.TryAction(() => _db.DataProvider.ReadTableInfosAsync(), []);
+                    var currentSize = tableInfos.FirstOrDefault(x => x.TableName == tableName)?.TotalSpace;
+
+                    if (size.HasValue && currentSize.HasValue && size > currentSize)
+                    {
+                        var diffBytes = currentSize.Value - size.Value;
+                        var diffPercent = Math.Round(diffBytes / (double)currentSize, 2);
+
+                        NotifySuccess(T("Common.OptimizeTableSuccess", 
+                            tableName, 
+                            Prettifier.HumanizeBytes(size.Value), 
+                            Prettifier.HumanizeBytes(currentSize.Value),
+                            Prettifier.HumanizeBytes(diffBytes),
+                            "<b>" + diffPercent.ToString("P2") + "</b>"));
+                    }
+                    else
+                    {
+                        NotifyInfo(T("Common.OptimizeTableInfo", tableName));
+                    }
                 }
             }
             catch (Exception ex)

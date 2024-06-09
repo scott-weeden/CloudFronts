@@ -19,7 +19,7 @@ namespace Smartstore.Core.Checkout.Cart
             int storeId = 0,
             Customer customer = null)
         {
-            Guard.NotNull(query, nameof(query));
+            Guard.NotNull(query);
 
             if (storeId > 0)
             {
@@ -33,7 +33,7 @@ namespace Smartstore.Core.Checkout.Cart
 
             return query
                 .Where(x => x.ShoppingCartTypeId == (int)type)
-                .OrderByDescending(x => x.Id);
+                .OrderBy(x => x.Id);
         }
 
         /// <summary>
@@ -98,11 +98,14 @@ namespace Smartstore.Core.Checkout.Cart
         /// </summary>
         /// <param name="query">Shopping cart item query to get sum.</param>
         /// <param name="cartType"><see cref="ShoppingCartType"/> of shopping cart items.</param>
+        /// <param name="active">A value indicating whether to only load active/inactive items. <c>null</c> to load all items.</param>
         /// <returns>Sub total of all open wish lists.</returns>
-        public static Task<decimal> GetOpenCartTypeSubTotalAsync(this IQueryable<ShoppingCartItem> query, ShoppingCartType cartType = ShoppingCartType.ShoppingCart)
+        public static Task<decimal> GetOpenCartTypeSubTotalAsync(this IQueryable<ShoppingCartItem> query, 
+            ShoppingCartType cartType = ShoppingCartType.ShoppingCart,
+            bool? active = null)
         {
             return query
-                .Where(x => x.ShoppingCartTypeId == (int)cartType && x.Product != null)
+                .Where(x => x.ShoppingCartTypeId == (int)cartType && x.Product != null && (active == null || x.Active == active.Value))
                 .SumAsync(x => (decimal?)(x.Product.Price * x.Quantity) ?? decimal.Zero);
         }
     }

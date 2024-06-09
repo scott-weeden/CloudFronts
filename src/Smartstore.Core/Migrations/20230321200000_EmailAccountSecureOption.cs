@@ -13,7 +13,8 @@ namespace Smartstore.Core.Migrations
         const string EmailAccountTable = nameof(EmailAccount);
         const string SecureOptionColumn = nameof(EmailAccount.SecureOption);
 
-        public bool RollbackOnFailure => false;
+        public DataSeederStage Stage => DataSeederStage.Early;
+        public bool AbortOnFailure => false;
 
         public override void Up()
         {

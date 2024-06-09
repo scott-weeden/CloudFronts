@@ -32,11 +32,6 @@ namespace Smartstore.Core.Checkout.Orders
         public bool AnonymousCheckoutAllowed { get; set; } = true;
 
         /// <summary>
-        /// Gets or sets a value indicating whether to enable "Terms of service".
-        /// </summary>
-        public bool TermsOfServiceEnabled { get; set; } = true;
-
-        /// <summary>
         /// Gets or sets a value indicating whether "Order completed" page should be skipped-
         /// </summary>
         public bool DisableOrderCompletedPage { get; set; }
@@ -92,5 +87,11 @@ namespace Smartstore.Core.Checkout.Orders
         /// Gets or sets the page size of the recurring payment list.
         /// </summary>
         public int RecurringPaymentListPageSize { get; set; } = 10;
+
+        /// <summary>
+        /// Gets or sets the maximum order age in days up to which to create and send messages.
+        /// Set to 0 to always send messages.
+        /// </summary>
+        public int MaxMessageOrderAgeInDays { get; set; } = 180;
     }
 }

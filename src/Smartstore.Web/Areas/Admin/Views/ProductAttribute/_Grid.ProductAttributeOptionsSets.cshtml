@@ -71,7 +71,7 @@
                 <template v-slot:display-name="item">
                     <i :class='item.row.TypeNameClass' :title='item.row.TypeName'></i>
                     <span class="color-container" v-if="item.row.HasColor"><span class='color' :style='{ background: item.row.Color }' :title='item.row.Color'>&nbsp;</span></span>
-                    <span>{{ item.value }} {{ item.row.QuantityInfo }}</span>
+                    <a href="#" class="text-truncate edit-attribute-option" :data-key="item.row.Id" :data-setid="item.row.ProductAttributeOptionsSetId">{{ item.value }} {{ item.row.QuantityInfo }}</a>
                 </template>
                 <template v-slot:display-linkedproductname="item">
 	                <span class='mr-1 badge' :class="'badge-' + item.row.LinkedProductTypeLabelHint">{{ item.row.LinkedProductTypeName }}</span>
@@ -124,7 +124,7 @@
             var btn = $(this);
             var optionsSetId = btn.data('setid');
             var id = btn.data('key');
-            var url = '@Url.Action("ProductAttributeOptionEditPopup")';
+            var url = '@Url.Action("ProductAttributeOptionEditPopup").EnsureEndsWith('/')';
             url += `${id}?btnId=btnRefreshOptions&formId=product-attribute-options-grid${optionsSetId}`;
 
             $('#btnRefreshOptions').val(optionsSetId);

@@ -4,17 +4,12 @@ using Smartstore.Core.Localization;
 
 namespace Smartstore.Core.Seo.Routing
 {
-    public class UrlSegment
+    public class UrlSegment(string original)
     {
-        public UrlSegment(string original)
-        {
-            Original = original;
-        }
-
         /// <summary>
         /// The original value.
         /// </summary>
-        public string Original { get; internal set; }
+        public string Original { get; internal set; } = original;
 
         private string Modified { get; set; }
 
@@ -73,7 +68,7 @@ namespace Smartstore.Core.Seo.Routing
             Host = new UrlSegment(request.Host.Value);
             PathBase = new UrlSegment(request.PathBase.Value);
             Culture = new UrlSegment(cultureCode);
-            Path = new UrlSegment(path.Trim('/'));
+            Path = new UrlSegment(path.TrimStart('/'));
             QueryString = new UrlSegment(request.QueryString.Value);
             Method = request.Method;
             IsLocalizedUrl = cultureCode != null;

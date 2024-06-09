@@ -15,6 +15,7 @@ namespace Smartstore.Web.Api.Controllers
     /// <summary>
     /// The endpoint for operations on ShoppingCartItem entity and managing shopping carts.
     /// </summary>
+    [WebApiGroup(WebApiGroupNames.Checkout)]
     [ProducesResponseType(Status403Forbidden)]
     [ProducesResponseType(Status404NotFound)]
     [ProducesResponseType(Status422UnprocessableEntity)]
@@ -309,12 +310,14 @@ namespace Smartstore.Web.Api.Controllers
         /// Updates a shopping cart item.
         /// </summary>
         /// <param name="quantity" example="1">The quantity to set.</param>
+        /// <param name="enabled" example="true">A value indicating whether to enable or disable the cart item.</param>
         [HttpPost("ShoppingCartItems({key})/UpdateItem")]
         [Permission(Permissions.Cart.Read)]
         [Consumes(Json), Produces(Json)]
         [ProducesResponseType(typeof(ShoppingCartItem), Status200OK)]
         public async Task<IActionResult> UpdateItem(int key,
-            [FromODataBody, Required] int quantity)
+            [FromODataBody] int? quantity = null,
+            [FromODataBody] bool? enabled = null)
         {
             try
             {
@@ -336,7 +339,7 @@ namespace Smartstore.Web.Api.Controllers
                     return Forbidden(message);
                 }
 
-                var warnings = await _shoppingCartService.Value.UpdateCartItemAsync(entity.Customer, key, quantity, false);
+                var warnings = await _shoppingCartService.Value.UpdateCartItemAsync(entity.Customer, key, quantity, enabled);
                 if (warnings.Count > 0)
                 {
                     return ErrorResult(null, string.Join(". ", warnings));

@@ -37,7 +37,8 @@ namespace Smartstore.Data.PostgreSql
 
         public override DataProviderFeatures Features
             => DataProviderFeatures.Shrink
-            | DataProviderFeatures.ReIndex
+            | DataProviderFeatures.OptimizeDatabase
+            | DataProviderFeatures.OptimizeTable
             | DataProviderFeatures.ComputeSize
             | DataProviderFeatures.AccessIncrement
             | DataProviderFeatures.StreamBlob
@@ -156,22 +157,43 @@ LIMIT {take} OFFSET {skip}";
                 : Task.FromResult(Database.ExecuteScalarRaw<long>(sql));
         }
 
-        protected override Task<int> ShrinkDatabaseCore(bool async, bool onlyWhenFast, CancellationToken cancelToken = default)
-        {
-            if (onlyWhenFast)
-            {
-                return Task.FromResult(0);
-            }
-
-            var sql = "VACUUM FULL";
-            return async
-                ? Database.ExecuteSqlRawAsync(sql, cancelToken)
-                : Task.FromResult(Database.ExecuteSqlRaw(sql));
-        }
-
-        protected override Task<int> ReIndexTablesCore(bool async, CancellationToken cancelToken = default)
+        protected override async Task<int> OptimizeDatabaseCore(bool async, CancellationToken cancelToken = default)
         {
             var sql = $"REINDEX DATABASE \"{DatabaseName}\"";
+            if (async)
+            {
+                await Database.ExecuteSqlRawAsync(sql, cancelToken);
+            }
+            else
+            {
+                Database.ExecuteSqlRaw(sql);
+            }
+
+            return await ShrinkDatabaseCore(async, cancelToken);
+        }
+
+        protected override async Task<int> OptimizeTableCore(string tableName, bool async, CancellationToken cancelToken = default)
+        {
+            var sql = $"REINDEX TABLE \"{tableName}\"";
+            var sqlVacuum = $"VACUUM \"{tableName}\""; // "VACUUM FULL" is VERY slow
+
+            if (async)
+            {
+                await Database.ExecuteSqlRawAsync(sql, cancelToken);
+                // Free physical space
+                return await Database.ExecuteSqlRawAsync(sqlVacuum, cancelToken);
+            }
+            else
+            {
+                Database.ExecuteSqlRaw(sql);
+                // Free physical space
+                return Database.ExecuteSqlRaw(sqlVacuum);
+            }
+        }
+
+        protected override Task<int> ShrinkDatabaseCore(bool async, CancellationToken cancelToken = default)
+        {
+            var sql = "VACUUM"; // "VACUUM FULL" is VERY slow
             return async
                 ? Database.ExecuteSqlRawAsync(sql, cancelToken)
                 : Task.FromResult(Database.ExecuteSqlRaw(sql));

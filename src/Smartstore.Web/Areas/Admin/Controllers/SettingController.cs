@@ -390,7 +390,7 @@ namespace Smartstore.Admin.Controllers
             // Does not contain any store specific settings.
             await Services.SettingFactory.SaveSettingsAsync(securitySettings);
 
-            return NotifyAndRedirect("GeneralCommon");
+            return NotifyAndRedirect(nameof(GeneralCommon));
         }
 
         [Permission(Permissions.Configuration.Setting.Read)]
@@ -400,7 +400,7 @@ namespace Smartstore.Admin.Controllers
             var model = await MapperFactory.MapAsync<CatalogSettings, CatalogSettingsModel>(catalogSettings);
             await MapperFactory.MapAsync(priceSettings, model.PriceSettings);
 
-            await PrepareCatalogConfigurationModelAsync(model);
+            await PrepareCatalogConfigurationModelAsync(model, catalogSettings);
 
             AddLocales(model.Locales, (locale, languageId) =>
             {
@@ -439,7 +439,7 @@ namespace Smartstore.Admin.Controllers
                 await _localizedEntityService.ApplyLocalizedSettingAsync(priceSettings, x => x.LimitedOfferBadgeLabel, localized.LimitedOfferBadgeLabel, localized.LanguageId, storeScope);
             }
 
-            return NotifyAndRedirect("Catalog");
+            return NotifyAndRedirect(nameof(Catalog));
         }
 
         [Permission(Permissions.Configuration.Setting.Read)]
@@ -510,7 +510,7 @@ namespace Smartstore.Admin.Controllers
 
             await _db.SaveChangesAsync();
 
-            return NotifyAndRedirect("CustomerUser");
+            return NotifyAndRedirect(nameof(CustomerUser));
         }
 
         private static bool ShouldUpdateIdentityOptions(CustomerUserSettingsModel.CustomerSettingsModel model, CustomerSettings settings)
@@ -897,7 +897,7 @@ namespace Smartstore.Admin.Controllers
 
             await Services.EventPublisher.PublishAsync(new ModelBoundEvent(model, settings, form));
 
-            return NotifyAndRedirect("Search");
+            return NotifyAndRedirect(nameof(Search));
         }
 
         [Permission(Permissions.Configuration.Setting.Read)]
@@ -922,7 +922,7 @@ namespace Smartstore.Admin.Controllers
             ModelState.Clear();
             MiniMapper.Map(model, settings);
 
-            return NotifyAndRedirect("DataExchange");
+            return NotifyAndRedirect(nameof(DataExchange));
         }
 
         [Permission(Permissions.Configuration.Setting.Read)]
@@ -960,7 +960,7 @@ namespace Smartstore.Admin.Controllers
             ModelState.Clear();
             await MapperFactory.MapAsync(model, settings);
 
-            return NotifyAndRedirect("Media");
+            return NotifyAndRedirect(nameof(Media));
         }
 
         [Permission(Permissions.Configuration.Setting.Update)]
@@ -983,15 +983,9 @@ namespace Smartstore.Admin.Controllers
 
         [Permission(Permissions.Configuration.Setting.Read)]
         [LoadSetting]
-        public IActionResult Payment(PaymentSettings settings)
+        public async Task<IActionResult> Payment(PaymentSettings settings)
         {
-            var model = new PaymentSettingsModel
-            {
-                CapturePaymentReason = settings.CapturePaymentReason,
-                ProductDetailPaymentMethodSystemNames = settings.ProductDetailPaymentMethodSystemNames.SplitSafe(",").ToArray(),
-                DisplayPaymentMethodIcons = settings.DisplayPaymentMethodIcons
-            };
-
+            var model = await MapperFactory.MapAsync<PaymentSettings, PaymentSettingsModel>(settings);
             var providers = _providerManager.GetAllProviders<IPaymentMethod>();
 
             var selectListItems = providers
@@ -1010,18 +1004,16 @@ namespace Smartstore.Admin.Controllers
         {
             if (!ModelState.IsValid)
             {
-                return Payment(settings);
+                return await Payment(settings);
             }
 
             ModelState.Clear();
 
-            settings.CapturePaymentReason = model.CapturePaymentReason;
-            settings.DisplayPaymentMethodIcons = model.DisplayPaymentMethodIcons;
-            settings.ProductDetailPaymentMethodSystemNames = model.ProductDetailPaymentMethodSystemNames.Convert<string>();
+            await MapperFactory.MapAsync(model, settings);
 
             await _cache.RemoveByPatternAsync(PaymentService.ProductDetailPaymentIconsPatternKey);
 
-            return NotifyAndRedirect("Payment");
+            return NotifyAndRedirect(nameof(Payment));
         }
 
         [Permission(Permissions.Configuration.Setting.Read)]
@@ -1162,9 +1154,9 @@ namespace Smartstore.Admin.Controllers
 
         [Permission(Permissions.Configuration.Setting.Read)]
         [LoadSetting]
-        public async Task<IActionResult> RewardPoints(RewardPointsSettings settings)
+        public IActionResult RewardPoints(RewardPointsSettings settings)
         {
-            var model = await MapperFactory.MapAsync<RewardPointsSettings, RewardPointsSettingsModel>(settings);
+            var model = MiniMapper.Map<RewardPointsSettings, RewardPointsSettingsModel>(settings);
 
             model.PrimaryStoreCurrencyCode = _currencyService.PrimaryCurrency.CurrencyCode;
 
@@ -1172,19 +1164,44 @@ namespace Smartstore.Admin.Controllers
         }
 
         [Permission(Permissions.Configuration.Setting.Update)]
-        [HttpPost, SaveSetting]
-        public async Task<IActionResult> RewardPoints(RewardPointsSettings settings, RewardPointsSettingsModel model)
+        [HttpPost, LoadSetting]
+        public async Task<IActionResult> RewardPoints(RewardPointsSettingsModel model, RewardPointsSettings settings, int storeScope)
         {
             if (!ModelState.IsValid)
             {
-                return await RewardPoints(settings);
+                return RewardPoints(settings);
             }
+
+            var form = Request.Form;
 
             ModelState.Clear();
 
-            await MapperFactory.MapAsync(model, settings);
+            settings = ((ISettings)settings).Clone() as RewardPointsSettings;
+            MiniMapper.Map(model, settings);
 
-            return NotifyAndRedirect("RewardPoints");
+            await _multiStoreSettingHelper.UpdateSettingsAsync(settings, form);
+
+            if (storeScope != 0 && MultiStoreSettingHelper.IsOverrideChecked(settings, nameof(RewardPointsSettings.PointsForPurchases_Amount), form))
+            {
+                await Services.Settings.ApplySettingAsync(settings, x => x.PointsForPurchases_Points, storeScope);
+            }
+
+            await _db.SaveChangesAsync();
+
+            return NotifyAndRedirect(nameof(RewardPoints));
+        }
+
+        public IActionResult RewardPointsForPurchasesInfo(decimal amount, int points)
+        {
+            if (amount == decimal.Zero && points == 0)
+            {
+                return new EmptyResult();
+            }
+
+            var amountFormatted = _currencyService.ConvertFromPrimaryCurrency(amount, Services.WorkContext.WorkingCurrency).ToString();
+            var info = T("RewardPoints.PointsForPurchasesInfo", amountFormatted, points.ToString("N0"));
+
+            return Content(info);
         }
 
         [Permission(Permissions.Configuration.Setting.Read)]
@@ -1198,7 +1215,27 @@ namespace Smartstore.Admin.Controllers
                 locale.ThirdPartyEmailHandOverLabel = settings.GetLocalizedSetting(x => x.ThirdPartyEmailHandOverLabel, languageId, storeScope, false, false);
             });
 
+            ViewBag.Checkouts = new List<ExtendedSelectListItem>
+            {
+                CreateCheckoutProcessItem(CheckoutProcess.Standard),
+                CreateCheckoutProcessItem(CheckoutProcess.Terminal),
+                CreateCheckoutProcessItem(CheckoutProcess.TerminalWithPayment)
+            };
+
             return View(model);
+
+            ExtendedSelectListItem CreateCheckoutProcessItem(string process)
+            {
+                var item = new ExtendedSelectListItem
+                {
+                    Text = T("Checkout.Process." + process),
+                    Value = process,
+                    Selected = settings.CheckoutProcess.EqualsNoCase(process)
+                };
+
+                item.CustomProperties["Description"] = T($"Checkout.Process.{process}.Hint").Value;
+                return item;
+            }
         }
 
         [Permission(Permissions.Configuration.Setting.Update)]
@@ -1219,7 +1256,7 @@ namespace Smartstore.Admin.Controllers
                 await _localizedEntityService.ApplyLocalizedSettingAsync(settings, x => x.ThirdPartyEmailHandOverLabel, localized.ThirdPartyEmailHandOverLabel, localized.LanguageId, storeScope);
             }
 
-            return NotifyAndRedirect("ShoppingCart");
+            return NotifyAndRedirect(nameof(ShoppingCart));
         }
 
         [Permission(Permissions.Configuration.Setting.Read)]
@@ -1400,7 +1437,7 @@ namespace Smartstore.Admin.Controllers
                 }
             }
 
-            return NotifyAndRedirect("Order");
+            return NotifyAndRedirect(nameof(Order));
         }
 
         [Permission(Permissions.Configuration.Setting.Read)]
@@ -1458,7 +1495,7 @@ namespace Smartstore.Admin.Controllers
             return num;
         }
 
-        private IActionResult NotifyAndRedirect(string actionMethod)
+        private RedirectToActionResult NotifyAndRedirect(string actionMethod)
         {
             NotifySuccess(T("Admin.Configuration.Updated"));
             return RedirectToAction(actionMethod);
@@ -1514,7 +1551,7 @@ namespace Smartstore.Admin.Controllers
             #endregion
         }
 
-        private async Task PrepareCatalogConfigurationModelAsync(CatalogSettingsModel model)
+        private async Task PrepareCatalogConfigurationModelAsync(CatalogSettingsModel model, CatalogSettings catalogSettings)
         {
             ViewBag.AvailableDefaultViewModes = new List<SelectListItem>
             {
@@ -1547,6 +1584,7 @@ namespace Smartstore.Admin.Controllers
 
             ViewBag.LimitedOfferBadgeStyles = AddBadgeStyles(model.PriceSettings.LimitedOfferBadgeStyle);
             ViewBag.OfferBadgeStyles = AddBadgeStyles(model.PriceSettings.OfferBadgeStyle);
+            ViewBag.AssociatedProductsHeaderFields = ProductController.CreateAssociatedProductsHeaderFieldsList(catalogSettings.CollapsibleAssociatedProductsHeaders, T);
 
             static List<SelectListItem> AddBadgeStyles(string selectedValue)
             {
@@ -1585,6 +1623,7 @@ namespace Smartstore.Admin.Controllers
                     new SelectListItem { Text = T("Admin.Catalog.Products.Fields.ShortDescription"), Value = "shortdescription" },
                     new SelectListItem { Text = T("Admin.Catalog.Products.Fields.FullDescription"), Value = "fulldescription" },
                     new SelectListItem { Text = T("Admin.Catalog.Products.Fields.ProductTags"), Value = "tagname" },
+                    new SelectListItem { Text = T("Admin.Configuration.Seo.MetaKeywords"), Value = "keyword" },
                     new SelectListItem { Text = T("Admin.Catalog.Manufacturers"), Value = "manufacturer" },
                     new SelectListItem { Text = T("Admin.Catalog.Categories"), Value = "category" },
                     new SelectListItem { Text = T("Admin.Catalog.Products.Fields.Sku"), Value = "sku" },

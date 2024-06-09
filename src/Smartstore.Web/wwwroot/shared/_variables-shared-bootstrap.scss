@@ -64,6 +64,8 @@ $enable-negative-margins:       true !default;
 
 $body-bg:                   $white !default;
 $body-color:                null !default;
+$body-secondary-color:      null !default;
+$body-tertiary-color:       null !default;
 
 
 // Links
@@ -181,7 +183,7 @@ $btn-active-border-tint-amount:   10% !default;
 
 // Form Check
 
-$form-check-input-border:               1px solid rgba(#000, .15);
+$form-check-input-border:               1px solid rgba($black, .15);
 $form-check-input-focus-border:         rgba(var(--form-check-checked-bg-rgb), 0.5);
 $form-check-input-focus-box-shadow:     0 0 0 0.2rem rgba(var(--form-check-checked-bg-rgb), 0.25);
 $form-check-transition:                 box-shadow 0.12s ease-in-out;
@@ -219,6 +221,12 @@ $dropdown-bg:                   $white !default;
 $dropdown-border-width:         1px !default;
 
 
+// Placeholders
+
+$placeholder-opacity-max:       .5 !default;
+$placeholder-opacity-min:       .2 !default;
+
+
 
 // Pagination Mini
 // --------------------------------------------------
@@ -234,12 +242,17 @@ $pagination-padding-x-xs:           6px !default;
 $modal-footer-bg:                   rgba($black, 0.04) !default;
 $modal-footer-margin-between:       0.375rem !default;
 $modal-inner-padding:               1.5rem !default;
-$modal-header-padding:              1.5rem !default;
-$modal-content-border-width:        0 !default;
+$modal-header-padding-x:            1.5rem !default;
+$modal-header-padding-y:            1rem !default;
+$modal-content-border-width:        0px !default;
 $modal-content-border-color:        rgba($black, .06) !default;
 $modal-backdrop-bg:                 $black !default;
 $modal-backdrop-opacity:            .68 !default;
 $modal-transition:                  all 0.2s ease-out !default;
+$modal-content-border-radius:       var(--border-radius-xl) !default;
+$modal-content-inner-border-radius: subtract($modal-content-border-radius, $modal-content-border-width) !default;
+$modal-content-box-shadow-xs:       var(--box-shadow-md) !default;
+$modal-content-box-shadow-sm-up:    var(--box-shadow-lg) !default;
 
 
 // Navs

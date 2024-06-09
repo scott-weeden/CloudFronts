@@ -150,12 +150,11 @@ namespace Smartstore.Web.Controllers
 
                         if (returnUrl.IsEmpty()
                             || returnUrl == "/"
-                            || returnUrl.Contains("/login?", StringComparison.OrdinalIgnoreCase)
-                            || returnUrl.Contains("/passwordrecoveryconfirm", StringComparison.OrdinalIgnoreCase)
+                            || returnUrl.Contains("/passwordrecovery", StringComparison.OrdinalIgnoreCase)
                             || returnUrl.Contains("/activation", StringComparison.OrdinalIgnoreCase)
                             || !Url.IsLocalUrl(returnUrl))
                         {
-                            return RedirectToAction("Info", "Customer");
+                            return RedirectToRoute("Homepage");
                         }
 
                         return RedirectToReferrer(returnUrl);
@@ -501,14 +500,25 @@ namespace Smartstore.Web.Controllers
         [LocalizedRoute("/passwordrecovery", Name = "PasswordRecovery")]
         public IActionResult PasswordRecovery()
         {
-            return View(new PasswordRecoveryModel());
+            var model = new PasswordRecoveryModel
+            {
+                DisplayCaptcha = _captchaSettings.CanDisplayCaptcha && _captchaSettings.ShowOnPasswordRecoveryPage
+            };
+
+            return View(model);
         }
 
         [HttpPost, DisallowRobot]
+        [ValidateCaptcha(CaptchaSettingName = nameof(CaptchaSettings.ShowOnPasswordRecoveryPage))]
         [LocalizedRoute("/passwordrecovery", Name = "PasswordRecovery")]
         [FormValueRequired("send-email")]
-        public async Task<IActionResult> PasswordRecovery(PasswordRecoveryModel model)
+        public async Task<IActionResult> PasswordRecovery(PasswordRecoveryModel model, string captchaError)
         {
+            if (_captchaSettings.ShowOnPasswordRecoveryPage && captchaError.HasValue())
+            {
+                ModelState.AddModelError(string.Empty, captchaError);
+            }
+
             if (ModelState.IsValid)
             {
                 var customer = await _userManager.FindByEmailAsync(model.Email);
@@ -534,6 +544,8 @@ namespace Smartstore.Web.Controllers
             }
 
             // If we got this far something failed. Redisplay form.
+            model.DisplayCaptcha = _captchaSettings.CanDisplayCaptcha && _captchaSettings.ShowOnPasswordRecoveryPage;
+
             return View(model);
         }
 
@@ -730,7 +742,7 @@ namespace Smartstore.Web.Controllers
         private async Task<IActionResult> FinalizeCustomerRegistrationAsync(Customer customer, string returnUrl)
         {
             // Remove ClientIdent: no other "same-building" guest should be identified by this ident.
-            customer.GenericAttributes.ClientIdent = null;
+            customer.ClientIdent = null;
 
             await AssignCustomerRolesAsync(customer);
 

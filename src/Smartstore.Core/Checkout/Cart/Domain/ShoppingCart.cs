@@ -1,4 +1,5 @@
 ﻿using System.Diagnostics;
+using Smartstore.Core.Checkout.Orders;
 using Smartstore.Core.Identity;
 using Smartstore.Utilities;
 
@@ -12,12 +13,20 @@ namespace Smartstore.Core.Checkout.Cart
     {
         public ShoppingCart(Customer customer, int storeId, IEnumerable<OrganizedShoppingCartItem> items)
         {
-            Guard.NotNull(customer);
-            Guard.NotNull(items);
-
-            Customer = customer;
+            Customer = Guard.NotNull(customer);
+            Items = Guard.NotNull(items?.ToArray());
             StoreId = storeId;
-            Items = items.ToArray();
+        }
+
+        public ShoppingCart(ShoppingCart other, IEnumerable<OrganizedShoppingCartItem> items = null)
+        {
+            Guard.NotNull(other);
+
+            Customer = other.Customer;
+            Items = items?.ToArray() ?? other.Items;
+            StoreId = other.StoreId;
+            CartType = other.CartType;
+            Requirements = other.Requirements;
         }
 
         /// <summary>
@@ -45,6 +54,17 @@ namespace Smartstore.Core.Checkout.Cart
         /// Store identifier.
         /// </summary>
         public int StoreId { get; }
+
+        /// <summary>
+        /// Gets a value indicating whether the cart requires shipping.
+        /// </summary>
+        public bool IsShippingRequired
+            => Requirements.HasFlag(CheckoutRequirements.Shipping) && Items.Any(x => x.Item.IsShippingEnabled);
+
+        /// <summary>
+        /// Checkout requirements.
+        /// </summary>
+        public CheckoutRequirements Requirements { get; init; } = CheckoutRequirements.All;
 
         #region Compare
 
@@ -86,7 +106,7 @@ namespace Smartstore.Core.Checkout.Cart
             var combiner = HashCodeCombiner
                 .Start()
                 .Add(StoreId)
-                .Add((int)CartType)
+                .Add(CartType)
                 .Add(Customer.Id)
                 .Add(attributes?.DiscountCouponCode)
                 .Add(attributes?.RawGiftCardCouponCodes)
@@ -94,7 +114,7 @@ namespace Smartstore.Core.Checkout.Cart
                 .Add(attributes?.VatNumber)
                 .Add(attributes?.UseRewardPointsDuringCheckout)
                 .Add(attributes?.UseCreditBalanceDuringCheckout)
-                .Add(Items.Select(x => x.Item.GetHashCode()));
+                .AddSequence(Items.Select(x => x.Item));
 
             return combiner.CombinedHash;
         }

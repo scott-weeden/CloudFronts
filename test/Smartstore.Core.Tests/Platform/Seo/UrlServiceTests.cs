@@ -1,4 +1,6 @@
-﻿using System.Collections.Generic;
+﻿using System.Collections.Concurrent;
+using System.Collections.Generic;
+using System.Data.OleDb;
 using System.Linq;
 using System.Threading.Tasks;
 using Moq;
@@ -7,6 +9,7 @@ using Smartstore.Caching;
 using Smartstore.Core.Catalog.Categories;
 using Smartstore.Core.Catalog.Products;
 using Smartstore.Core.Common.Configuration;
+using Smartstore.Core.Data;
 using Smartstore.Core.Identity;
 using Smartstore.Core.Localization;
 using Smartstore.Core.Security;
@@ -14,6 +17,7 @@ using Smartstore.Core.Seo;
 using Smartstore.Core.Seo.Routing;
 using Smartstore.Core.Stores;
 using Smartstore.Test.Common;
+using Smartstore.Threading;
 
 namespace Smartstore.Core.Tests.Seo
 {
@@ -149,7 +153,7 @@ namespace Smartstore.Core.Tests.Seo
 
             var product10 = products.First(x => x.Name == "Product 10 Test");
             var cachedSlug = collection.Find(0, product10.Id);
-            Assert.NotNull(cachedSlug);
+            Assert.That(cachedSlug, Is.Not.Null);
             cachedSlug.Slug.ShouldEqual("product-10-test");
 
             // Nor prefetch
@@ -192,6 +196,49 @@ namespace Smartstore.Core.Tests.Seo
             slugs = db.UrlRecords.ToList();
             slugs.Count.ShouldEqual((newProducts.Count + newCategories.Count) * 2);
         }
+
+        //// Unit test fails too often (EF EnterCriticalSection multi-threading issues)
+        /// <param name="entities"></param>
+        /// <returns></returns>
+        //[Test]
+        //public async Task CanPopulateConcurrently()
+        //{
+        //    var db = DbContext;
+
+        //    await PopulateSlugs(db.Products.ToList());
+
+        //    var tasks = new List<Task>();
+        //    var resultDictionary = new ConcurrentDictionary<Product, ValidateSlugResult>();
+
+        //    for (var i = 0; i < 100; i++)
+        //    {
+        //        var product = new Product { Name = "Product 1 Test" };
+        //        db.Products.Add(product);
+        //        await db.SaveChangesAsync();
+
+        //        tasks.Add(new Task(async state =>
+        //        {
+        //            var p = (Product)state;
+        //            var result = await _urlService.SaveSlugAsync(p, seName: null, ensureNotEmpty: true, displayName: p.GetDisplayName());
+
+        //            resultDictionary[p] = result;
+        //        }, product));
+        //    }
+
+        //    // Start all tasks at once
+        //    foreach (Task task in tasks)
+        //    {
+        //        task.Start();
+        //    }
+
+        //    await Task.WhenAll(tasks);
+
+        //    foreach (var kv in resultDictionary)
+        //    {
+        //        var activeSlug = await _urlService.GetActiveSlugAsync(kv.Key.Id, kv.Key.GetEntityName(), 0);
+        //        activeSlug.ShouldEqual(kv.Value.Slug);
+        //    }
+        //}
 
         private async Task PopulateSlugs(IEnumerable<ISlugSupported> entities)
         {

@@ -129,13 +129,21 @@ namespace Smartstore.Core.Data.Migrations
         }
 
         /// <summary>
+        /// Runs all pending data seeders that are <see cref="DataSeederStage.Late"/>.
+        /// </summary>
+        /// <remarks>
+        /// This method is not thread-safe and should only be called in an app initializer.
+        /// </remarks>
+        public abstract Task RunLateSeedersAsync(CancellationToken cancelToken = default);
+
+        /// <summary>
         /// Seeds locale resources of pending migrations.
         /// </summary>
         /// <param name="fromVersion">Specifies the version of a migration from which locale resources are to be seeded.</param>
         /// <returns>The number of seeded migrations.</returns>
         public async Task<int> SeedPendingLocaleResourcesAsync(long fromVersion, CancellationToken cancelToken = default)
         {
-            Guard.NotNegative(fromVersion, nameof(fromVersion));
+            Guard.NotNegative(fromVersion);
 
             if (Context is not SmartDbContext db)
             {

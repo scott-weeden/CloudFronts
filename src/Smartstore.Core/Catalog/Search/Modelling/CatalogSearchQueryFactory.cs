@@ -29,8 +29,6 @@ namespace Smartstore.Core.Catalog.Search.Modelling
 
     public partial class CatalogSearchQueryFactory : SearchQueryFactoryBase, ICatalogSearchQueryFactory
     {
-        protected static readonly string[] _instantSearchFields = new[] { "manufacturer", "sku", "gtin", "mpn", "attrname", "variantname" };
-
         protected readonly ICommonServices _services;
         protected readonly ICatalogSearchQueryAliasMapper _catalogSearchQueryAliasMapper;
         protected readonly CatalogSettings _catalogSettings;
@@ -66,27 +64,9 @@ namespace Smartstore.Core.Catalog.Search.Modelling
             var controller = ctx.Request.RouteValues.GetControllerName();
             var action = ctx.Request.RouteValues.GetActionName();
             var origin = "{0}{1}/{2}".FormatInvariant(area.HasValue() ? area + "/" : string.Empty, controller, action);
-            var fields = new List<string> { "name" };
-            var term = GetValueFor<string>("q");
             var isInstantSearch = action.EqualsNoCase("InstantSearch");
-
-            if (isInstantSearch)
-            {
-                fields.Add("shortdescription");
-                fields.Add("tagname");
-
-                foreach (var fieldName in _instantSearchFields)
-                {
-                    if (_searchSettings?.SearchFields?.Contains(fieldName) ?? false)
-                    {
-                        fields.Add(fieldName);
-                    }
-                }
-            }
-            else if (_searchSettings.SearchFields != null)
-            {
-                fields.AddRange(_searchSettings.SearchFields);
-            }
+            var fields = _searchSettings.GetSearchFields(isInstantSearch);
+            var term = GetValueFor<string>("q");
 
             var query = new CatalogSearchQuery(fields.ToArray(), term, _searchSettings.SearchMode)
                 .OriginatesFrom(origin)
@@ -163,7 +143,11 @@ namespace Smartstore.Core.Catalog.Search.Modelling
                 var entityId = _httpContextAccessor.HttpContext.GetRouteValueAs<int?>("categoryId");
                 if (entityId.HasValue)
                 {
-                    entity = await _services.DbContext.Categories.FindByIdAsync(entityId.Value);
+                    entity = await _services.DbContext.Categories
+                        .AsNoTracking()
+                        .SelectSummary()
+                        .FirstOrDefaultAsync(x => x.Id == entityId.Value);
+
                     entityViewMode = ((Category)entity)?.DefaultViewMode;
                 }
             }
@@ -172,7 +156,10 @@ namespace Smartstore.Core.Catalog.Search.Modelling
                 var entityId = _httpContextAccessor.HttpContext.GetRouteValueAs<int?>("manufacturerId");
                 if (entityId.HasValue)
                 {
-                    entity = await _services.DbContext.Manufacturers.FindByIdAsync(entityId.Value);
+                    entity = await _services.DbContext.Manufacturers
+                        .AsNoTracking()
+                        .SelectSummary()
+                        .FirstOrDefaultAsync(x => x.Id == entityId.Value);
                 }
             }
 
@@ -369,7 +356,7 @@ namespace Smartstore.Core.Catalog.Search.Modelling
 
             var alias = _catalogSearchQueryAliasMapper.GetCommonFacetAliasByGroupKind(FacetGroupKind.Category, query.LanguageId ?? 0);
 
-            if (TryGetValueFor(alias ?? "c", out List<int> ids) && ids != null && ids.Any())
+            if (TryGetValueFor(alias ?? "c", out List<int> ids) && ids != null && ids.Count > 0)
             {
                 // TODO; (mc) Get deep ids (???) Make a low-level version of CatalogHelper.GetChildCategoryIds()
                 query.WithCategoryIds(_catalogSettings.IncludeFeaturedProductsInNormalLists ? null : false, ids.ToArray());
@@ -420,7 +407,7 @@ namespace Smartstore.Core.Catalog.Search.Modelling
 
             var alias = _catalogSearchQueryAliasMapper.GetCommonFacetAliasByGroupKind(FacetGroupKind.Brand, query.LanguageId ?? 0);
 
-            if (TryGetValueFor(alias ?? "m", out List<int> ids) && ids != null && ids.Any())
+            if (TryGetValueFor(alias ?? "m", out List<int> ids) && ids != null && ids.Count > 0)
             {
                 query.WithManufacturerIds(null, ids.ToArray());
             }
@@ -589,7 +576,7 @@ namespace Smartstore.Core.Catalog.Search.Modelling
         {
             var alias = _catalogSearchQueryAliasMapper.GetCommonFacetAliasByGroupKind(FacetGroupKind.DeliveryTime, query.LanguageId ?? 0);
 
-            if (TryGetValueFor(alias ?? "d", out List<int> ids) && ids != null && ids.Any())
+            if (TryGetValueFor(alias ?? "d", out List<int> ids) && ids != null && ids.Count > 0)
             {
                 query.WithDeliveryTimeIds(ids.ToArray());
             }

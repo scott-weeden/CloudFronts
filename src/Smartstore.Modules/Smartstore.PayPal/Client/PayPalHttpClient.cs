@@ -10,6 +10,7 @@ using Smartstore.Core.Catalog.Products;
 using Smartstore.Core.Checkout.Cart;
 using Smartstore.Core.Checkout.Orders;
 using Smartstore.Core.Checkout.Payment;
+using Smartstore.Core.Checkout.Shipping;
 using Smartstore.Core.Checkout.Tax;
 using Smartstore.Core.Common;
 using Smartstore.Core.Common.Services;
@@ -49,6 +50,7 @@ namespace Smartstore.PayPal.Client
         private readonly IPriceCalculationService _priceCalculationService;
         private readonly IProductService _productService;
         private readonly IOrderCalculationService _orderCalculationService;
+        private readonly IRoundingHelper _roundingHelper;
 
         public PayPalHttpClient(
             HttpClient client,
@@ -63,7 +65,8 @@ namespace Smartstore.PayPal.Client
             ITaxService taxService,
             IPriceCalculationService priceCalculationService,
             IProductService productService,
-            IOrderCalculationService orderCalculationService)
+            IOrderCalculationService orderCalculationService,
+            IRoundingHelper roundingHelper)
         {
             _client = client;
             _checkoutStateAccessor = checkoutStateAccessor;
@@ -78,6 +81,7 @@ namespace Smartstore.PayPal.Client
             _priceCalculationService = priceCalculationService;
             _productService = productService;
             _orderCalculationService = orderCalculationService;
+            _roundingHelper = roundingHelper;
         }
 
         #region Payment processing
@@ -85,11 +89,9 @@ namespace Smartstore.PayPal.Client
         /// <summary>
         /// Gets an order. (For testing purposes only)
         /// </summary>
-        public async Task<PayPalResponse> GetOrderAsync(ProcessPaymentRequest request, ProcessPaymentResult result, CancellationToken cancelToken = default)
+        public async Task<PayPalResponse> GetOrderAsync(string payPalOrderId, CancellationToken cancelToken = default)
         {
-            Guard.NotNull(request);
-
-            var ordersGetRequest = new OrdersGetRequest(request.PayPalOrderId);
+            var ordersGetRequest = new OrdersGetRequest(payPalOrderId);
             var response = await ExecuteRequestAsync(ordersGetRequest, cancelToken);
             var rawResponse = response.Body<object>().ToString();
 
@@ -168,7 +170,7 @@ namespace Smartstore.PayPal.Client
                 },
                 AppContext = new PayPalApplictionContext
                 {
-                    ShippingPreference = cart.IsShippingRequired() ? ShippingPreference.SetProvidedAddress : ShippingPreference.NoShipping
+                    ShippingPreference = cart.IsShippingRequired ? ShippingPreference.SetProvidedAddress : ShippingPreference.NoShipping
                 }
             };
 
@@ -215,8 +217,7 @@ namespace Smartstore.PayPal.Client
 
             var patches = new List<Patch<object>>
             {
-                new Patch<object>
-                {
+                new() {
                     Op = "replace",
                     Path = "/purchase_units/@reference_id=='default'",
                     Value = purchaseUnits[0]
@@ -367,21 +368,89 @@ namespace Smartstore.PayPal.Client
         public Task<PayPalResponse> CreateWebhookAsync(CreateWebhookRequest request, CancellationToken cancelToken = default)
             => ExecuteRequestAsync(request, cancelToken);
 
+        /// <summary>
+        /// Adds a tracking number to a PayPal order.
+        /// </summary>
+        public virtual async Task<PayPalResponse> AddTrackingNumberAsync(Shipment shipment, CancellationToken cancelToken = default)
+        {
+            Guard.NotNull(shipment);
+
+            var trackingMessage = new TrackingMessage
+            {
+                Carrier = "OTHER",
+                CarrierNameOther = shipment.Order.ShippingMethod,
+                TrackingNumber = shipment.TrackingNumber,
+                CaptureId = shipment.Order.CaptureTransactionId
+            };
+
+            var shipmentItems = new List<Messages.ShipmentItem>();
+            foreach (var item in shipment.ShipmentItems)
+            {
+                var orderItem = shipment.Order.OrderItems.Where(x => x.Id == item.OrderItemId).FirstOrDefault();
+
+                shipmentItems.Add(new Messages.ShipmentItem
+                {
+                    Sku = orderItem.Sku,
+                    Quantity = item.Quantity.ToString(),
+                    Name = orderItem.Product.Name
+                });
+            }
+
+            trackingMessage.Items = [.. shipmentItems];
+
+            var trackingRequest = new OrderAddTrackingRequest(shipment.Order.AuthorizationTransactionCode.ToString())
+                .WithRequestId(Guid.NewGuid().ToString())
+                .WithBody(trackingMessage);
+
+            var response = await ExecuteRequestAsync(trackingRequest, shipment.Order.StoreId, cancelToken);
+
+            return response;
+        }
+
+        /// <summary>
+        /// Updates a tracking number for a PayPal order.
+        /// </summary>
+        public virtual async Task<PayPalResponse> CancelTrackingNumberAsync(Shipment shipment, CancellationToken cancelToken = default)
+        {
+            Guard.NotNull(shipment);
+            var trackingId = shipment.GenericAttributes.Get<string>("PayPalTrackingId");
+
+            // If no tracking id is stored it means the previous number wasn't transmitted to PayPal yet thus we can't cancel the tracking number.
+            if (!trackingId.HasValue())
+            {
+                return null;
+            }
+
+            var patches = new List<Patch<string>>
+            {
+                new() {
+                    Op = "replace",
+                    Path = "/status",
+                    Value = "CANCELLED"
+                }
+            };
+
+            var updateTrackingRequest = new OrderUpdateTrackingRequest(shipment.Order.AuthorizationTransactionCode.ToString(), trackingId)
+                .WithBody(patches);
+
+            var response = await ExecuteRequestAsync(updateTrackingRequest, shipment.Order.StoreId, cancelToken);
+
+            return response;
+        }
+
         #endregion
 
         #region Utilities 
 
         private async Task<List<PurchaseUnitItem>> GetPurchaseUnitItemsAsync(ShoppingCart cart, Customer customer, Currency currency)
         {
-            var model = await cart.MapAsync(
-                isEditable: false,
-                prepareEstimateShippingIfEnabled: false,
-                prepareAndDisplayOrderReviewData: false);
-
+            var model = await cart.MapAsync(isEditable: false, prepareEstimateShippingIfEnabled: false);
             var purchaseUnitItems = new List<PurchaseUnitItem>();
             var cartProducts = cart.Items.Select(x => x.Item.Product).ToArray();
             var batchContext = _productService.CreateProductBatchContext(cartProducts, null, customer, false);
             var calculationOptions = _priceCalculationService.CreateDefaultOptions(false, customer, _currencyService.PrimaryCurrency, batchContext);
+
+            var isVatExempt = await _taxService.IsVatExemptAsync(customer);
 
             foreach (var item in model.Items)
             {
@@ -396,7 +465,7 @@ namespace Smartstore.PayPal.Client
                 var productName = item.ProductName?.Value?.Truncate(126);
                 var productDescription = item.ShortDesc?.Value?.Truncate(126);
 
-                purchaseUnitItems.Add(new PurchaseUnitItem
+                var purchaseUnitItem = new PurchaseUnitItem
                 {
                     UnitAmount = new MoneyMessage
                     {
@@ -407,14 +476,20 @@ namespace Smartstore.PayPal.Client
                     Description = productDescription,
                     Category = item.IsEsd ? ItemCategoryType.DigitalGoods : ItemCategoryType.PhysicalGoods,
                     Quantity = item.EnteredQuantity.ToString(),
-                    Sku = item.Sku,
-                    Tax = new MoneyMessage
+                    Sku = item.Sku
+                };
+
+                if (!isVatExempt)
+                {
+                    purchaseUnitItem.Tax = new MoneyMessage
                     {
                         Value = convertedUnitPriceTax.Amount.ToStringInvariant("F"),
                         CurrencyCode = currency.CurrencyCode
-                    },
-                    TaxRate = taxRate.Rate.ToStringInvariant("F")
-                });
+                    };
+                    purchaseUnitItem.TaxRate = taxRate.Rate.ToStringInvariant("F");
+                }
+
+                purchaseUnitItems.Add(purchaseUnitItem);
             }
 
             return purchaseUnitItems;
@@ -429,10 +504,11 @@ namespace Smartstore.PayPal.Client
             var currency = _workContext.WorkingCurrency;
 
             var purchaseUnitItems = await GetPurchaseUnitItemsAsync(cart, customer, currency);
+            var isVatExempt = await _taxService.IsVatExemptAsync(customer);
 
             // Get subtotal
             var cartSubTotalExclTax = await _orderCalculationService.GetShoppingCartSubtotalAsync(cart, false);
-            var cartSubTotalinklTax = await _orderCalculationService.GetShoppingCartSubtotalAsync(cart, true);
+            var cartSubTotalInklTax = await _orderCalculationService.GetShoppingCartSubtotalAsync(cart, true);
             var subTotalConverted = _currencyService.ConvertFromPrimaryCurrency(cartSubTotalExclTax.SubtotalWithoutDiscount.Amount, currency);
 
             // Get tax
@@ -449,7 +525,7 @@ namespace Smartstore.PayPal.Client
             purchaseUnitItems.Each(x => itemTotal += x.UnitAmount.Value.Convert<decimal>() * x.Quantity.ToInt());
 
             decimal itemTotalTax = 0;
-            purchaseUnitItems.Each(x => itemTotalTax += x.Tax.Value.Convert<decimal>() * x.Quantity.ToInt());
+            purchaseUnitItems.Each(x => itemTotalTax += x.Tax != null ? x.Tax.Value.Convert<decimal>() * x.Quantity.ToInt() : 0);
 
             var purchaseUnit = new PurchaseUnit
             {
@@ -489,7 +565,16 @@ namespace Smartstore.PayPal.Client
                 orderTotalDiscountAmount = _currencyService.ConvertFromPrimaryCurrency(cartTotal.DiscountAmount.Amount, currency);
             }
 
-            decimal discountAmount = orderTotalDiscountAmount.Amount + cartSubTotalinklTax.DiscountAmount.Amount;
+            var subTotalDiscountAmount = new Money();
+            if (cartSubTotalInklTax.DiscountAmount > decimal.Zero)
+            {
+                subTotalDiscountAmount = _currencyService.ConvertFromPrimaryCurrency(
+                    isVatExempt ? cartSubTotalExclTax.DiscountAmount.Amount : cartSubTotalInklTax.DiscountAmount.Amount, 
+                    currency);
+            }
+
+            decimal discountAmount = _roundingHelper.Round(orderTotalDiscountAmount.Amount + subTotalDiscountAmount.Amount);
+            
             purchaseUnit.Amount.AmountBreakdown.Discount = new MoneyMessage
             {
                 Value = discountAmount.ToStringInvariant("F"),
@@ -497,26 +582,27 @@ namespace Smartstore.PayPal.Client
             };
 
             // Get shipping cost
-            var shippingTotal = await _orderCalculationService.GetShoppingCartShippingTotalAsync(cart, true);
-            decimal shippingTotalAmount = 0;
+            var shippingTotal = await _orderCalculationService.GetShoppingCartShippingTotalAsync(cart, !isVatExempt);
+            var shippingTotalAmount = new Money();
             if (shippingTotal.ShippingTotal != null)
             {
-                shippingTotalAmount = shippingTotal.ShippingTotal.Value.Amount;
+                shippingTotalAmount = _currencyService.ConvertFromPrimaryCurrency(_roundingHelper.Round(shippingTotal.ShippingTotal.Value.Amount), currency);
                 purchaseUnit.Amount.AmountBreakdown.Shipping = new MoneyMessage
                 {
-                    Value = shippingTotal.ShippingTotal.Value.Amount.ToStringInvariant("F"),
+                    Value = shippingTotalAmount.Amount.ToStringInvariant("F"),
                     CurrencyCode = currency.CurrencyCode
                 };
             }
 
             if (cartTotal.Total != null && cartTotal.Total.Value != cartSubTotalExclTax.SubtotalWithDiscount)
             {
-                purchaseUnit.Amount.Value = cartTotal.Total.Value.Amount.ToStringInvariant("F");
+                var cartTotalConverted = _currencyService.ConvertFromPrimaryCurrency(cartTotal.Total.Value.Amount, currency);
+                purchaseUnit.Amount.Value = cartTotalConverted.Amount.ToStringInvariant("F");
             }
 
             // TODO: (mh) (core) This is very hackish. PayPal was contacted and requested for a correct solution.
             // Lets check for rounding issues.
-            var calculatedAmount = itemTotal + itemTotalTax + shippingTotalAmount - discountAmount;
+            var calculatedAmount = itemTotal + itemTotalTax + shippingTotalAmount.Amount - discountAmount;
             var amountMismatch = calculatedAmount != purchaseUnit.Amount.Value.Convert<decimal>();
             if (amountMismatch)
             {
@@ -575,7 +661,7 @@ namespace Smartstore.PayPal.Client
                 {
                     ShippingPreference = isExpressCheckout
                         ? ShippingPreference.GetFromFile
-                        : cart.IsShippingRequired() ? ShippingPreference.SetProvidedAddress : ShippingPreference.NoShipping
+                        : cart.IsShippingRequired ? ShippingPreference.SetProvidedAddress : ShippingPreference.NoShipping
                 }
             };
 

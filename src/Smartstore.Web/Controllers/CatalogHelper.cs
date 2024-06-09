@@ -17,6 +17,7 @@ using Smartstore.Core.Content.Media;
 using Smartstore.Core.Content.Menus;
 using Smartstore.Core.Identity;
 using Smartstore.Core.Localization;
+using Smartstore.Core.Rules;
 using Smartstore.Core.Security;
 using Smartstore.Core.Seo;
 using Smartstore.Web.Infrastructure.Hooks;
@@ -37,6 +38,7 @@ namespace Smartstore.Web.Controllers
         private readonly IProductAttributeService _productAttributeService;
         private readonly IProductAttributeMaterializer _productAttributeMaterializer;
         private readonly IProductAttributeFormatter _productAttributeFormatter;
+        private readonly IRuleProviderFactory _ruleProviderFactory;
         private readonly ITaxService _taxService;
         private readonly ITaxCalculator _taxCalculator;
         private readonly ICurrencyService _currencyService;
@@ -53,6 +55,7 @@ namespace Smartstore.Web.Controllers
         private readonly TaxSettings _taxSettings;
         private readonly PerformanceSettings _performanceSettings;
         private readonly MeasureSettings _measureSettings;
+        private readonly SearchSettings _searchSettings;
         private readonly IDeliveryTimeService _deliveryTimeService;
         private readonly ICatalogSearchService _catalogSearchService;
         private readonly ICatalogSearchQueryFactory _catalogSearchQueryFactory;
@@ -74,6 +77,7 @@ namespace Smartstore.Web.Controllers
             IProductAttributeService productAttributeService,
             IProductAttributeMaterializer productAttributeMaterializer,
             IProductAttributeFormatter productAttributeFormatter,
+            IRuleProviderFactory ruleProviderFactory,
             ITaxService taxService,
             ITaxCalculator taxCalculator,
             ICurrencyService currencyService,
@@ -87,6 +91,7 @@ namespace Smartstore.Web.Controllers
             CustomerSettings customerSettings,
             CaptchaSettings captchaSettings,
             MeasureSettings measureSettings,
+            SearchSettings searchSettings,
             TaxSettings taxSettings,
             PerformanceSettings performanceSettings,
             IDeliveryTimeService deliveryTimeService,
@@ -110,6 +115,7 @@ namespace Smartstore.Web.Controllers
             _productAttributeService = productAttributeService;
             _productAttributeMaterializer = productAttributeMaterializer;
             _productAttributeFormatter = productAttributeFormatter;
+            _ruleProviderFactory = ruleProviderFactory;
             _taxService = taxService;
             _taxCalculator = taxCalculator;
             _currencyService = currencyService;
@@ -119,6 +125,7 @@ namespace Smartstore.Web.Controllers
             _priceLabelService = priceLabelService;
             _stockSubscriptionService = stockSubscriptionService;
             _measureSettings = measureSettings;
+            _searchSettings = searchSettings;
             _taxSettings = taxSettings;
             _performanceSettings = performanceSettings;
             _deliveryTimeService = deliveryTimeService;
@@ -437,17 +444,23 @@ namespace Smartstore.Web.Controllers
         public async Task GetBreadcrumbAsync(IBreadcrumb breadcrumb, ActionContext context, Product product = null)
         {
             var menu = await _menuService.GetMenuAsync("Main");
-            var currentNode = await menu.ResolveCurrentNodeAsync(context);
-
-            if (currentNode != null)
+            if (menu == null)
             {
-                currentNode.Trail.Where(x => !x.IsRoot).Each(x => breadcrumb.Track(x.Value));
+                return;
             }
 
+            var currentNode = await menu.ResolveCurrentNodeAsync(context);
+
+            currentNode?.Trail.Where(x => !x.IsRoot).Each(x => breadcrumb.Track(x.Value));
+
             // Add trail of parent product if product has no category assigned.
-            if (product != null && !(breadcrumb.Trail?.Any() ?? false))
+            if (product != null && !(breadcrumb.Trail?.Any() ?? false) && product.ParentGroupedProductId != 0)
             {
-                var parentProduct = await _db.Products.FindByIdAsync(product.ParentGroupedProductId, false);
+                var parentProduct = await _db.Products
+                    .AsNoTracking()
+                    .SelectSummary()
+                    .FirstOrDefaultAsync(x => x.Id == product.ParentGroupedProductId);
+
                 if (parentProduct != null)
                 {
                     var routeData = new RouteData();

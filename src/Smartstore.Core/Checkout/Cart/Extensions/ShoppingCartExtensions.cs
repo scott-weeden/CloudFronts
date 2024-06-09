@@ -6,26 +6,26 @@ namespace Smartstore.Core.Checkout.Cart
     public static partial class ShoppingCartExtensions
     {
         /// <summary>
-        /// Checks whether the shopping cart requires shipping.
-        /// </summary>
-        /// <returns>
-        /// <c>True</c> if any product requires shipping, otherwise <c>false</c>.
-        /// </returns>
-        public static bool IsShippingRequired(this ShoppingCart cart)
-        {
-            Guard.NotNull(cart, nameof(cart));
-
-            return cart.Items.Where(x => x.Item.IsShippingEnabled).Any();
-        }
-
-        /// <summary>
         /// Gets the total quantity of products in the cart.
         /// </summary>
 		public static int GetTotalQuantity(this ShoppingCart cart)
         {
-            Guard.NotNull(cart, nameof(cart));
+            Guard.NotNull(cart);
 
-            return cart.Items.Sum(x => x.Item.Quantity);
+            return cart.Items.Where(x => x.Item.ParentItemId == null).Sum(x => (int?)x.Item.Quantity) ?? 0;
+        }
+
+        /// <summary>
+        /// Gets all products in cart, including those of bundle items.
+        /// </summary>
+        public static Product[] GetAllProducts(this ShoppingCart cart)
+        {
+            Guard.NotNull(cart);
+
+            return cart.Items
+                .Select(x => x.Item.Product)
+                .Union(cart.Items.Select(x => x.ChildItems).SelectMany(child => child.Select(x => x.Item.Product)))
+                .ToArray();
         }
 
         /// <summary>
@@ -35,7 +35,7 @@ namespace Smartstore.Core.Checkout.Cart
         /// <returns><c>True</c> if any product matches the condition, otherwise <c>false</c>.</returns>
         public static bool IncludesMatchingItems(this ShoppingCart cart, Func<Product, bool> matcher)
         {
-            Guard.NotNull(cart, nameof(cart));
+            Guard.NotNull(cart);
 
             return cart.Items.Where(x => x.Item.Product != null && matcher(x.Item.Product)).Any();
         }
@@ -46,7 +46,7 @@ namespace Smartstore.Core.Checkout.Cart
         /// <returns>A value indicating whether the shopping cart contains a recurring item.</returns>
 		public static bool ContainsRecurringItem(this ShoppingCart cart)
         {
-            Guard.NotNull(cart, nameof(cart));
+            Guard.NotNull(cart);
 
             return cart.Items.Where(x => x.Item.Product?.IsRecurring ?? false).Any();
         }
@@ -57,8 +57,8 @@ namespace Smartstore.Core.Checkout.Cart
         /// <returns><see cref="RecurringCycleInfo"/>.</returns>
         public static RecurringCycleInfo GetRecurringCycleInfo(this ShoppingCart cart, ILocalizationService localizationService)
         {
-            Guard.NotNull(cart, nameof(cart));
-            Guard.NotNull(localizationService, nameof(localizationService));
+            Guard.NotNull(cart);
+            Guard.NotNull(localizationService);
 
             var info = new RecurringCycleInfo();
             int? cycleLength = null;
@@ -67,12 +67,7 @@ namespace Smartstore.Core.Checkout.Cart
 
             foreach (var cartItem in cart.Items)
             {
-                var product = cartItem.Item.Product;
-                if (product == null)
-                {
-                    throw new InvalidOperationException($"Product with Id={cartItem.Item.ProductId} cannot be loaded.");
-                }
-
+                var product = cartItem.Item.Product ?? throw new InvalidOperationException($"Product with Id={cartItem.Item.ProductId} cannot be loaded.");
                 if (product.IsRecurring)
                 {
                     if (cycleLength.HasValue && cycleLength.Value != product.RecurringCycleLength)

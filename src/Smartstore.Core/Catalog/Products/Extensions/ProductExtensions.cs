@@ -16,14 +16,13 @@ namespace Smartstore.Core.Catalog.Products
 
             var values = product.MergedDataValues;
 
-            if (values != null)
-                values.Clear();
+            values?.Clear();
 
             if (combination == null)
                 return;
 
             if (values == null)
-                product.MergedDataValues = values = new Dictionary<string, object>();
+                product.MergedDataValues = values = [];
 
             if (ManageInventoryMethod.ManageStockByAttributes == (ManageInventoryMethod)product.ManageInventoryMethodId)
             {
@@ -67,14 +66,11 @@ namespace Smartstore.Core.Catalog.Products
         /// <returns>A value indicating whether the product is available by stock</returns>
         public static bool IsAvailableByStock(this Product product)
         {
-            Guard.NotNull(product, nameof(product));
+            Guard.NotNull(product);
 
-            if (product.ManageInventoryMethod == ManageInventoryMethod.ManageStock || product.ManageInventoryMethod == ManageInventoryMethod.ManageStockByAttributes)
+            if (product.ManageInventoryMethod != ManageInventoryMethod.DontManageStock && product.StockQuantity <= 0 && product.BackorderMode == BackorderMode.NoBackorders)
             {
-                if (product.StockQuantity <= 0 && product.BackorderMode == BackorderMode.NoBackorders)
-                {
-                    return false;
-                }
+                return false;
             }
 
             return true;
@@ -88,20 +84,19 @@ namespace Smartstore.Core.Catalog.Products
         /// <returns>Product stock message.</returns>
         public static string FormatStockMessage(this Product product, ILocalizationService localizationService)
         {
-            Guard.NotNull(product, nameof(product));
-            Guard.NotNull(localizationService, nameof(localizationService));
+            Guard.NotNull(product);
+            Guard.NotNull(localizationService);
 
             var stockMessage = string.Empty;
 
-            if ((product.ManageInventoryMethod == ManageInventoryMethod.ManageStock || product.ManageInventoryMethod == ManageInventoryMethod.ManageStockByAttributes)
-                && product.DisplayStockAvailability)
+            if (product.ManageInventoryMethod != ManageInventoryMethod.DontManageStock && product.DisplayStockAvailability)
             {
                 if (product.StockQuantity > 0)
                 {
                     if (product.DisplayStockQuantity)
                     {
                         var str = localizationService.GetResource("Products.Availability.InStockWithQuantity");
-                        stockMessage = str.FormatCurrent(product.StockQuantity);
+                        stockMessage = str.FormatInvariant(product.StockQuantity.ToString("N0"));
                     }
                     else
                     {
@@ -129,20 +124,21 @@ namespace Smartstore.Core.Catalog.Products
         /// </summary>
         /// <param name="product">Product entity.</param>
         /// <param name="catalogSettings">Catalog settings.</param>
+        /// <param name="isStockManaged">
+        /// A value indicating whether the stock of the product is managed.
+        /// Will be obtained via <see cref="Product.ManageInventoryMethod"/> if <c>null</c>.
+        /// </param>
         /// <returns>A value indicating whether to display the delivery time according to stock quantity.</returns>
-        public static bool DisplayDeliveryTimeAccordingToStock(this Product product, CatalogSettings catalogSettings)
+        public static bool DisplayDeliveryTimeAccordingToStock(this Product product, CatalogSettings catalogSettings, bool? isStockManaged = null)
         {
-            Guard.NotNull(product, nameof(product));
-            Guard.NotNull(catalogSettings, nameof(catalogSettings));
+            Guard.NotNull(product);
+            Guard.NotNull(catalogSettings);
 
-            if (product.ManageInventoryMethod == ManageInventoryMethod.ManageStock || product.ManageInventoryMethod == ManageInventoryMethod.ManageStockByAttributes)
+            isStockManaged ??= product.ManageInventoryMethod != ManageInventoryMethod.DontManageStock;
+
+            if (isStockManaged == true)
             {
-                if (catalogSettings.DeliveryTimeIdForEmptyStock.HasValue && product.StockQuantity <= 0)
-                {
-                    return true;
-                }
-
-                return product.StockQuantity > 0;
+                return product.StockQuantity > 0 || (product.StockQuantity <= 0 && catalogSettings.DeliveryTimeIdForEmptyStock.HasValue);
             }
 
             return true;
@@ -153,19 +149,23 @@ namespace Smartstore.Core.Catalog.Products
         /// </summary>
         /// <param name="product">Product entity.</param>
         /// <param name="catalogSettings">Catalog settings.</param>
+        /// <param name="isStockManaged">
+        /// A value indicating whether the stock of the product is managed.
+        /// Will be obtained via <see cref="Product.ManageInventoryMethod"/> if <c>null</c>.
+        /// </param>
         /// <returns>The delivery time identifier according to stock quantity. <c>null</c> if not specified.</returns>
-        public static int? GetDeliveryTimeIdAccordingToStock(this Product product, CatalogSettings catalogSettings)
+        public static int? GetDeliveryTimeIdAccordingToStock(this Product product, CatalogSettings catalogSettings, bool? isStockManaged = null)
         {
-            Guard.NotNull(catalogSettings, nameof(catalogSettings));
+            Guard.NotNull(catalogSettings);
 
             if (product == null)
             {
                 return null;
             }
 
-            if ((product.ManageInventoryMethod == ManageInventoryMethod.ManageStock || product.ManageInventoryMethod == ManageInventoryMethod.ManageStockByAttributes)
-                && catalogSettings.DeliveryTimeIdForEmptyStock.HasValue
-                && product.StockQuantity <= 0)
+            isStockManaged ??= product.ManageInventoryMethod != ManageInventoryMethod.DontManageStock;
+
+            if (isStockManaged == true && catalogSettings.DeliveryTimeIdForEmptyStock.HasValue && product.StockQuantity <= 0)
             {
                 return catalogSettings.DeliveryTimeIdForEmptyStock.Value;
             }
@@ -200,7 +200,7 @@ namespace Smartstore.Core.Catalog.Products
 
             if (product.AllowedQuantities.IsEmpty())
             {
-                return Array.Empty<int>();
+                return [];
             }
 
             return product.AllowedQuantities
@@ -246,7 +246,7 @@ namespace Smartstore.Core.Catalog.Products
         /// <returns>List of required product identifiers.</returns>
         public static int[] ParseRequiredProductIds(this Product product)
         {
-            Guard.NotNull(product, nameof(product));
+            Guard.NotNull(product);
 
             return product.RequiredProductIds
                 .SplitSafe(',', StringSplitOptions.TrimEntries)
@@ -259,7 +259,7 @@ namespace Smartstore.Core.Catalog.Products
         {
             if (product != null && product.ProductType != ProductType.SimpleProduct)
             {
-                var key = "Admin.Catalog.Products.ProductType.{0}.Label".FormatInvariant(product.ProductType.ToString());
+                var key = "Admin.Catalog.Products.ProductType.{0}.Label".FormatInvariant(product.ProductType.ToStringInvariant());
                 return localizationService.GetResource(key);
             }
 

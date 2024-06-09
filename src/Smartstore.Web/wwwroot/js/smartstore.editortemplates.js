@@ -138,30 +138,32 @@
             acceptButton.on("click", e => {
                 e.preventDefault();
 
-                // Submit form.
-                var form = submitButton.closest("form");
-                if (form.length == 0) {
-                    console.error("Failed to retrieve form.");
-                    return;
+                const url = dialog.data("action-url");
+
+                if (acceptButton.data("commit-action") != 'delete') {
+                    var form = submitButton.closest("form");
+
+                    if (!_.isEmpty(url)) {
+                        form.attr("action", url);
+                    }
+
+                    if (submitButton.val()) {
+                        $("<input />")
+                            .attr("type", "hidden")
+                            .attr("name", submitButton.attr("name"))
+                            .attr("value", submitButton.val())
+                            .appendTo(form);
+                    }
+
+                    form.trigger("submit");
+                }
+                else {
+                    $({}).postData({
+                        url,
+                        data: { id: acceptButton.data("commit-id") }
+                    });
                 }
 
-                var formPostUrl = dialog.data("form-post-url");
-                if (formPostUrl.length > 0) {
-                    form.attr("action", formPostUrl);
-                }
-
-                // Add hidden input field with value of submit button in case of required form value.
-                if (submitButton.val()) {
-                    $("<input />")
-                        .attr("type", "hidden")
-                        .attr("name", submitButton.attr("name"))
-                        .attr("value", submitButton.val())
-                        .appendTo(form);
-                }
-                
-                form.submit();
-
-                // Close dialog.
                 dialog.hide();
             });
         });

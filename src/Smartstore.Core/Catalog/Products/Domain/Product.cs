@@ -1,9 +1,11 @@
-﻿using System.ComponentModel.DataAnnotations;
+﻿using System.Collections.Frozen;
+using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
 using System.Diagnostics;
 using System.Runtime.Serialization;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
+using Newtonsoft.Json;
 using Smartstore.Core.Catalog.Attributes;
 using Smartstore.Core.Catalog.Brands;
 using Smartstore.Core.Catalog.Categories;
@@ -51,6 +53,9 @@ namespace Smartstore.Core.Catalog.Products
                 .WithMany()
                 .HasForeignKey(c => c.ComparePriceLabelId)
                 .OnDelete(DeleteBehavior.SetNull);
+
+            builder.Property(c => c.GroupedProductConfiguration)
+                .HasConversion(new GroupedProductConfigurationConverter());
 
             builder
                 .HasMany(c => c.ProductTags)
@@ -102,7 +107,7 @@ namespace Smartstore.Core.Catalog.Products
     {
         #region Static
 
-        private static readonly HashSet<string> _visibilityAffectingProductProps = new()
+        private static readonly FrozenSet<string> _visibilityAffectingProductProps = new string[]
         {
             nameof(AvailableEndDateTimeUtc),
             nameof(AvailableStartDateTimeUtc),
@@ -114,7 +119,7 @@ namespace Smartstore.Core.Catalog.Products
             nameof(Published),
             nameof(SubjectToAcl),
             nameof(Visibility)
-        };
+        }.ToFrozenSet();
 
         public static IReadOnlyCollection<string> GetVisibilityAffectingPropertyNames()
         {
@@ -123,11 +128,9 @@ namespace Smartstore.Core.Catalog.Products
 
         #endregion
 
-        /// <inheritdoc/>
         [NotMapped, IgnoreDataMember]
         public bool MergedDataIgnore { get; set; }
 
-        /// <inheritdoc/>
         [NotMapped, IgnoreDataMember]
         public Dictionary<string, object> MergedDataValues { get; set; }
 
@@ -168,6 +171,12 @@ namespace Smartstore.Core.Catalog.Products
         /// Gets or sets the parent product identifier. It is used if this product is associated with a grouped product.
         /// </summary>
         public int ParentGroupedProductId { get; set; }
+
+        /// <summary>
+        /// Gets or sets the configuration for a grouped product (optional).
+        /// </summary>
+        [MaxLength, Column("ProductTypeConfiguration")]
+        public GroupedProductConfiguration GroupedProductConfiguration { get; set; }
 
         /// <summary>
         /// Gets or sets the visibility level of the product.
@@ -706,6 +715,11 @@ namespace Smartstore.Core.Catalog.Products
         public decimal? LowestAttributeCombinationPrice { get; set; }
 
         /// <summary>
+        /// Gets or sets a value indicating whether an attribute combination is required for the product to be ordered.
+        /// </summary>
+        public bool AttributeCombinationRequired { get; set; }
+
+        /// <summary>
         /// Gets or sets the behaviour when selecting product attributes.
         /// </summary>
         public AttributeChoiceBehaviour AttributeChoiceBehaviour { get; set; }
@@ -1028,13 +1042,11 @@ namespace Smartstore.Core.Catalog.Products
             protected set => _productBundleItems = value;
         }
 
-        /// <inheritdoc/>
         public string GetDisplayName()
         {
             return Name;
         }
 
-        /// <inheritdoc/>
         public string[] GetDisplayNameMemberNames() => new[] { nameof(Name) };
     }
 }

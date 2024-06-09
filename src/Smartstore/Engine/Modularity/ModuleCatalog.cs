@@ -1,24 +1,43 @@
-﻿using System.Reflection;
+﻿using System.Collections.Frozen;
+using System.Reflection;
 
 namespace Smartstore.Engine.Modularity
 {
     public class ModuleCatalog : IModuleCatalog
     {
-        private readonly Dictionary<string, IModuleDescriptor> _nameMap = new(StringComparer.OrdinalIgnoreCase);
-        private readonly Dictionary<Assembly, IModuleDescriptor> _assemblyMap = new();
+        private readonly FrozenDictionary<string, IModuleDescriptor> _nameMap;
+        private readonly FrozenDictionary<Assembly, IModuleDescriptor> _assemblyMap;
+        private readonly FrozenDictionary<string, IModuleDescriptor> _themeMap;
 
         public ModuleCatalog(IEnumerable<IModuleDescriptor> modules)
         {
-            Guard.NotNull(modules, nameof(modules));
+            Guard.NotNull(modules);
+
+            var nameMap = new Dictionary<string, IModuleDescriptor>(StringComparer.OrdinalIgnoreCase);
+            var assemblyMap = new Dictionary<Assembly, IModuleDescriptor>();
+            var themeMap = new Dictionary<string, IModuleDescriptor>(StringComparer.OrdinalIgnoreCase);
 
             foreach (var module in modules)
             {
-                _nameMap[module.SystemName] = module;
+                nameMap[module.SystemName] = module;
 
                 if (module.Module?.Assembly != null)
                 {
-                    _assemblyMap[module.Module.Assembly] = module;
+                    assemblyMap[module.Module.Assembly] = module;
                 }
+
+                if (module.Theme.HasValue())
+                {
+                    themeMap[module.Theme] = module;
+                }
+            }
+
+            _nameMap = nameMap.ToFrozenDictionary();
+            _assemblyMap = assemblyMap.ToFrozenDictionary();
+
+            if (themeMap.Count > 0)
+            {
+                _themeMap = themeMap.ToFrozenDictionary();
             }
 
             IncompatibleModules = modules
@@ -59,7 +78,22 @@ namespace Smartstore.Engine.Modularity
             if (name.HasValue() && _nameMap.TryGetValue(name, out var descriptor))
             {
                 if (!installedOnly || descriptor.IsInstalled())
+                {
                     return descriptor;
+                } 
+            }
+
+            return null;
+        }
+
+        public IModuleDescriptor GetModuleByTheme(string themeName, bool installedOnly = true)
+        {
+            if (_themeMap != null && themeName.HasValue() && _themeMap.TryGetValue(themeName, out var descriptor))
+            {
+                if (!installedOnly || descriptor.IsInstalled())
+                {
+                    return descriptor;
+                }
             }
 
             return null;

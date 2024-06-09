@@ -37,8 +37,8 @@ namespace Smartstore.Data.MySql
         }
 
         public override DataProviderFeatures Features
-            => DataProviderFeatures.Shrink
-            | DataProviderFeatures.ReIndex
+            => DataProviderFeatures.OptimizeDatabase
+            | DataProviderFeatures.OptimizeTable
             | DataProviderFeatures.ComputeSize
             | DataProviderFeatures.AccessIncrement
             | DataProviderFeatures.ExecuteSqlScript
@@ -157,25 +157,13 @@ LIMIT {take} OFFSET {skip}";
                 : Task.FromResult(Database.ExecuteScalarRaw<long>(sql));
         }
 
-        protected override Task<int> ShrinkDatabaseCore(bool async, bool onlyWhenFast, CancellationToken cancelToken = default)
-        {
-            if (onlyWhenFast)
-            {
-                return Task.FromResult(0);
-            }
-            
-            return async
-                ? ReIndexTablesAsync(cancelToken)
-                : Task.FromResult(ReIndexTables());
-        }
-
-        protected override async Task<int> ReIndexTablesCore(bool async, CancellationToken cancelToken = default)
+        protected override async Task<int> OptimizeDatabaseCore(bool async, CancellationToken cancelToken = default)
         {
             var sqlTables = $"SHOW TABLES FROM `{DatabaseName}`";
             var tables = async 
                 ? await Database.ExecuteQueryRawAsync<string>(sqlTables, cancelToken).ToListAsync(cancelToken)
                 : Database.ExecuteQueryRaw<string>(sqlTables).ToList();
-
+            
             if (tables.Count > 0)
             {
                 var sql = $"OPTIMIZE TABLE `{string.Join("`, `", tables)}`";
@@ -185,6 +173,14 @@ LIMIT {take} OFFSET {skip}";
             }
 
             return 0;
+        }
+
+        protected override async Task<int> OptimizeTableCore(string tableName, bool async, CancellationToken cancelToken = default)
+        {
+            var sql = $"OPTIMIZE TABLE `{tableName}`";
+            return async
+                ? await Database.ExecuteSqlRawAsync(sql, cancelToken)
+                : Database.ExecuteSqlRaw(sql);
         }
 
         protected override async Task<int?> GetTableIncrementCore(string tableName, bool async)

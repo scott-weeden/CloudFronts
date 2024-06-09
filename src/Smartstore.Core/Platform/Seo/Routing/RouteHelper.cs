@@ -33,8 +33,8 @@ namespace Smartstore.Core.Seo.Routing
         }
 
         /// <summary>
-        /// Normalizes a path component according to <see cref="RouteOptions.AppendTrailingSlash"/>
-        /// and <see cref="RouteOptions.LowercaseUrls"/>. Call this method if you didn't obtain
+        /// Normalizes a path component according to <c>RouteOptions.AppendTrailingSlash</c>
+        /// and <c>RouteOptions.LowercaseUrls</c>. Call this method if you didn't obtain
         /// <paramref name="path"/> from any <see cref="IUrlHelper"/> or <see cref="LinkGenerator"/>
         /// method.
         /// </summary>
@@ -72,7 +72,7 @@ namespace Smartstore.Core.Seo.Routing
         }
 
         /// <summary>
-        /// Normalizes a query string component according to <see cref="RouteOptions.LowercaseQueryStrings"/>. 
+        /// Normalizes a query string component according to <c>RouteOptions.LowercaseQueryStrings</c>. 
         /// Call this method if you didn't obtain <paramref name="queryString"/> 
         /// from any <see cref="IUrlHelper"/> or <see cref="LinkGenerator"/> method.
         /// </summary>
@@ -95,7 +95,7 @@ namespace Smartstore.Core.Seo.Routing
         }
 
         /// <summary>
-        /// Normalizes a query string component according to <see cref="RouteOptions.LowercaseQueryStrings"/>. 
+        /// Normalizes a query string component according to <c>RouteOptions.LowercaseQueryStrings</c>. 
         /// </summary>
         /// <param name="queryString">The query string to normalize.</param>
         /// <returns>The normalized query string.</returns>
@@ -123,7 +123,7 @@ namespace Smartstore.Core.Seo.Routing
 
         #endregion
 
-        private readonly HashSet<string> _disallowRobotPaths = new();
+        private readonly HashSet<string> _disallowRobotPaths = [];
         private readonly HashSet<string> _reservedPaths = new(StringComparer.OrdinalIgnoreCase);
         private readonly HashSet<string> _reservedPartialPaths = new(StringComparer.OrdinalIgnoreCase)
         {

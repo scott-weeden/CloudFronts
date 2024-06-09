@@ -581,6 +581,7 @@ namespace Smartstore.Core.Platform.DataExchange.Export
             }
 
             _writer.WriteElementString(nameof(ShoppingCartItem.Id), entity.Id.ToString());
+            _writer.WriteElementString(nameof(ShoppingCartItem.Active), entity.Active.ToString());
             _writer.WriteElementString(nameof(ShoppingCartItem.StoreId), entity.StoreId.ToString());
             _writer.WriteElementString(nameof(ShoppingCartItem.ParentItemId), entity.ParentItemId?.ToString() ?? string.Empty);
             _writer.WriteElementString(nameof(ShoppingCartItem.BundleItemId), entity.BundleItemId?.ToString() ?? string.Empty);
@@ -721,6 +722,7 @@ namespace Smartstore.Core.Platform.DataExchange.Export
             _writer.WriteElementString(nameof(Product.BundlePerItemShipping), entity.BundlePerItemShipping.ToString());
             _writer.WriteElementString(nameof(Product.BundlePerItemShoppingCart), entity.BundlePerItemShoppingCart.ToString());
             _writer.WriteElementString(nameof(Product.LowestAttributeCombinationPrice), lowestAttributeCombinationPrice?.ToString(_culture) ?? string.Empty);
+            _writer.WriteElementString(nameof(Product.AttributeCombinationRequired), entity.AttributeCombinationRequired.ToString());
             _writer.WriteElementString(nameof(Product.AttributeChoiceBehaviour), ((int)entity.AttributeChoiceBehaviour).ToString());
             _writer.WriteElementString(nameof(Product.IsEsd), entity.IsEsd.ToString());
             _writer.WriteElementString(nameof(Product.CustomsTariffNumber), entity.CustomsTariffNumber);
@@ -1080,6 +1082,7 @@ namespace Smartstore.Core.Platform.DataExchange.Export
                     _writer.WriteElementString(nameof(SpecificationAttribute.Id), entitySa.Id.ToString());
                     _writer.WriteElementString(nameof(SpecificationAttribute.Name), (string)option.SpecificationAttribute.Name);
                     _writer.WriteElementString(nameof(SpecificationAttribute.Alias), (string)option.SpecificationAttribute.Alias);
+                    _writer.WriteElementString(nameof(SpecificationAttribute.Essential), entitySa.Essential.ToString());
                     _writer.WriteElementString(nameof(SpecificationAttribute.DisplayOrder), entitySa.DisplayOrder.ToString());
                     _writer.WriteElementString(nameof(SpecificationAttribute.AllowFiltering), entitySa.AllowFiltering.ToString());
                     _writer.WriteElementString(nameof(SpecificationAttribute.ShowOnProductPage), entitySa.ShowOnProductPage.ToString());

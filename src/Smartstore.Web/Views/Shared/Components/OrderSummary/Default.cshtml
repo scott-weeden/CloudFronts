@@ -2,25 +2,33 @@
 
 @model ShoppingCartModel
 
-<div class="order-summary-content cart-content" data-empty-text="@T("ShoppingCart.CartIsEmpty")">
-    <zone name="order_summary_content_before" />
+@{
+    var hasItems = Model.Items.Any();
+    var checkoutAllowed = Model.Items.Any(x => x.Active);
+    var shippingInfoUrl = await Url.TopicAsync("ShippingInfo", true);
 
-    <partial name="_OrderReviewData" model="Model.OrderReviewData" />
+    var paymentButtons = hasItems
+        ? (await Model.ButtonPaymentMethods.Items
+            .SelectAwait(x => x.InvokeAsync(ViewContext))
+            .AsyncToList())
+            .Where(x => x.HasContent())
+        : Enumerable.Empty<IHtmlContent>();
+}
+
+<div class="order-summary-content cart-content"
+     data-empty-text="@T("ShoppingCart.CartIsEmpty")"
+     data-update-item-url="@Url.Action("UpdateCartItem", "ShoppingCart")">
+    <zone name="order_summary_content_before" />
 
     @if (Model.DisplayCommentBox && !Model.IsEditable)
     {
         <partial name="_CommentBox" model="Model" />
     }
 
-    @if (Model.Items.Any())
+    @if (hasItems)
     {
-        <div sm-if="Model.Warnings.Count > 0" class="alert alert-danger">
-            <ul>
-                @foreach (var warning in Model.Warnings)
-                {
-                    <li>@Html.Raw(warning)</li>
-                }
-            </ul>
+        <div id="cart-warnings">
+            <partial name="CartWarnings" model="Model.Warnings" />
         </div>
 
         @* "File upload" attribute control type requries "multipart/form-data" *@
@@ -36,7 +44,10 @@
                 </div>
                 @* Cart Summary *@
                 <div class="col-lg-5 col-xl-4">
-                    <div class="cart-footer">
+                    <div id="cart-select-products-warning" class="alert alert-warning@(checkoutAllowed ? " d-none" : string.Empty)">
+                        @Html.Raw(Model.CheckoutNotAllowedWarning)
+                    </div>
+                    <div id="cart-summary-container" class="cart-footer@(checkoutAllowed ? string.Empty : " d-none")">
                         <div class="row">
                             <div class="col-12 cart-footer-group">
                                 @if (Model.IsEditable)
@@ -73,7 +84,7 @@
                             </div>
 
                             <zone name="order_summary_actions" remove-if-empty="true" replace-content="true">
-                                <div sm-if="Model.IsEditable" class="col-12 mt-3 cart-footer-actions">
+                                <div sm-if="Model.IsEditable" class="col-12 mt-2 cart-footer-actions">
                                     <zone name="order_summary_buttons_before" />
 
                                     <div class="cart-buttons">
@@ -85,20 +96,11 @@
                                                     <i class="fa fa-angle-right"></i>
                                                 </button>
                                             </div>
-
-                                            @{
-                                                var paymentButtons = (await Model.ButtonPaymentMethods.Items
-                                                .SelectAwait(x => x.InvokeAsync(ViewContext))
-                                                .AsyncToList())
-                                                .Where(x => x.HasContent());
-                                            }
-
                                             <div sm-if="paymentButtons.Any()" class="addon-buttons">
                                                 <div class="d-flex flex-column row-gap-2">
                                                     <div class="text-center">
                                                         <span>@T("ShoppingCart.AlternativePaymentButtons")</span>
                                                     </div>
-
                                                     @*Payment method buttons (e.g. Paypal, Amazon Pay)*@
                                                     @foreach (var button in paymentButtons)
                                                     {
@@ -154,8 +156,8 @@
     <script sm-target-zone="scripts" data-origin="order-summary">
         $(function () {
             $('a.download-user-agreement').on("click", function () {
-                var url = '@(Url.Action("GetUserAgreement", "Download"))?productId=' + $(this).attr('data-id'),
-                    dialog = $('#user-agreement-modal');
+                const url = '@(Url.Action("GetUserAgreement", "Download"))?productId=' + $(this).attr('data-id');
+                const dialog = $('#user-agreement-modal');
 
                 dialog.find('.modal-body').empty();
 
@@ -164,11 +166,22 @@
                 });
 
                 dialog.modal();
-
                 return false;
             });
         });
     </script>
+}
+
+@if (shippingInfoUrl.HasValue())
+{
+    <modal id="shipping-info-modal" sm-render-at-page-end="true" sm-size="FlexSmall">
+        <modal-body>
+            <iframe src="@shippingInfoUrl" frameBorder="0" class="h-100"></iframe>
+        </modal-body>
+        <modal-footer>
+            <button type="button" class="btn btn-secondary" data-dismiss="modal">@T("Common.Close")</button>
+        </modal-footer>
+    </modal>
 }
 
 @if (Model.IsEditable)

@@ -1,6 +1,5 @@
 ﻿using System.Linq.Dynamic.Core;
 using Smartstore.Core.Catalog.Attributes;
-using Smartstore.Core.Catalog.Products;
 using Smartstore.Core.Checkout.Attributes;
 using Smartstore.Core.Checkout.Cart;
 using Smartstore.Core.Checkout.Rules;
@@ -9,6 +8,7 @@ using Smartstore.Core.Common.Services;
 using Smartstore.Core.Configuration;
 using Smartstore.Core.Data;
 using Smartstore.Core.Localization;
+using Smartstore.Core.Rules;
 using Smartstore.Core.Stores;
 using Smartstore.Data;
 using Smartstore.Engine.Modularity;
@@ -30,7 +30,7 @@ namespace Smartstore.Core.Checkout.Shipping
         public ShippingService(
             IProductAttributeMaterializer productAttributeMaterializer,
             ICheckoutAttributeMaterializer checkoutAttributeMaterializer,
-            ICartRuleProvider cartRuleProvider,
+            IRuleProviderFactory ruleProviderFactory,
             ShippingSettings shippingSettings,
             IProviderManager providerManager,
             ISettingFactory settingFactory,
@@ -40,7 +40,7 @@ namespace Smartstore.Core.Checkout.Shipping
         {
             _productAttributeMaterializer = productAttributeMaterializer;
             _checkoutAttributeMaterializer = checkoutAttributeMaterializer;
-            _cartRuleProvider = cartRuleProvider;
+            _cartRuleProvider = ruleProviderFactory.GetProvider<ICartRuleProvider>(RuleScope.Cart);
             _shippingSettings = shippingSettings;
             _providerManager = providerManager;
             _settingFactory = settingFactory;
@@ -100,13 +100,13 @@ namespace Smartstore.Core.Checkout.Shipping
 
             if (matchRules)
             {
-                var contextAction = (CartRuleContext context) =>
+                void contextAction(CartRuleContext context)
                 {
                     if (storeId > 0 && storeId != context.Store.Id)
                     {
                         context.Store = _storeContext.GetStoreById(storeId);
                     }
-                };
+                }
 
                 return await shippingMethods
                     .WhereAwait(async x => await _cartRuleProvider.RuleMatchesAsync(x, contextAction: contextAction))
@@ -120,7 +120,7 @@ namespace Smartstore.Core.Checkout.Shipping
         {
             Guard.NotNull(cartItem);
 
-            var weight = await GetCartWeight(new[] { cartItem }, multiplyByQuantity, true);
+            var weight = await GetCartWeight([cartItem], multiplyByQuantity, true);
             return weight;
         }
 
@@ -145,19 +145,22 @@ namespace Smartstore.Core.Checkout.Shipping
             return cartWeight;
         }
 
-        public virtual ShippingOptionRequest CreateShippingOptionRequest(ShoppingCart cart, Address shippingAddress, int storeId)
+        public virtual ShippingOptionRequest CreateShippingOptionRequest(
+            ShoppingCart cart, 
+            Address shippingAddress, 
+            int storeId,
+            bool matchRules = true)
         {
-            var shippingItems = cart.Items.Where(x => x.Item.IsShippingEnabled);
-
-            return new ShippingOptionRequest
+            return new()
             {
+                MatchRules = matchRules,
                 StoreId = storeId,
                 Customer = cart.Customer,
                 ShippingAddress = shippingAddress,
                 CountryFrom = null,
                 StateProvinceFrom = null,
                 ZipPostalCodeFrom = string.Empty,
-                Items = new List<OrganizedShoppingCartItem>(shippingItems)
+                Items = new List<OrganizedShoppingCartItem>(cart.Items.Where(x => x.Item.IsShippingEnabled))
             };
         }
 
@@ -195,7 +198,7 @@ namespace Smartstore.Core.Checkout.Shipping
                     {
                         result.Errors.Add(error);
 
-                        if (request?.Items?.Any() ?? false)
+                        if (!request.Items.IsNullOrEmpty())
                         {
                             Logger.Warn(error);
                         }
@@ -204,13 +207,13 @@ namespace Smartstore.Core.Checkout.Shipping
             }
 
             // Return valid options if any present (ignores the errors returned by other shipping rate compuation methods).
-            if (_shippingSettings.ReturnValidOptionsIfThereAreAny && result.ShippingOptions.Any() && result.Errors.Any())
+            if (_shippingSettings.ReturnValidOptionsIfThereAreAny && result.ShippingOptions.Count > 0 && result.Errors.Count > 0)
             {
                 result.Errors.Clear();
             }
 
             // No shipping options loaded.
-            if (!result.ShippingOptions.Any() && !result.Errors.Any())
+            if (result.ShippingOptions.Count == 0 && result.Errors.Count == 0)
             {
                 result.Errors.Add(T("Checkout.ShippingOptionCouldNotBeLoaded"));
             }
@@ -268,9 +271,9 @@ namespace Smartstore.Core.Checkout.Shipping
                 .Distinct()
                 .ToArray();
 
-            var linkedProducts = linkedProductIds.Any()
+            var linkedProducts = linkedProductIds.Length > 0
                 ? await _db.Products.AsNoTracking().Where(x => linkedProductIds.Contains(x.Id)).ToDictionaryAsync(x => x.Id)
-                : new Dictionary<int, Product>();
+                : [];
 
             // INFO: always iterate cart items (not attribute values). Attributes can occur multiple times in cart.
             foreach (var item in cart)

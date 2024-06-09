@@ -96,14 +96,16 @@ namespace Smartstore.Core.Checkout.Orders
             ShoppingCart cart,
             bool includeRewardPoints = true,
             bool includePaymentFee = true,
-            bool includeCreditBalance = true)
+            bool includeCreditBalance = true,
+            ProductBatchContext batchContext = null,
+            bool cache = true)
         {
             Guard.NotNull(cart);
 
             var cacheKey = $"ordercalculation:carttotal:{cart.GetHashCode()}-{includeRewardPoints}-{includePaymentFee}-{includeCreditBalance}";
 
             // INFO: CartTotalRule uses AsyncLock on this method! IRequestCache.Get would deadlock cart page.
-            if (_requestCache.Contains(cacheKey))
+            if (cache && _requestCache.Contains(cacheKey))
             {
                 return _requestCache.Get<ShoppingCartTotal>(cacheKey, null);
             }
@@ -115,7 +117,7 @@ namespace Smartstore.Core.Checkout.Orders
             var (cartTaxTotal, _) = await GetCartTaxTotalAsync(cart, includePaymentFee);
             var cartTax = Round(includeTax ? 0m : cartTaxTotal);
 
-            var subtotal = await GetCartSubtotalAsync(cart, false);
+            var subtotal = await GetCartSubtotalAsync(cart, false, batchContext);
             var subtotalWithDiscount = Round(includeTax ? subtotal.SubtotalWithDiscountGross : subtotal.SubtotalWithDiscountNet);
             var subtotalWithoutDiscount = Round(includeTax ? subtotal.SubtotalWithoutDiscountGross : subtotal.SubtotalWithoutDiscountNet);
             var subtotalDiscount = Round(includeTax ? subtotal.DiscountAmountGross : subtotal.DiscountAmountNet);
@@ -287,19 +289,32 @@ namespace Smartstore.Core.Checkout.Orders
                 }
             };
 
-            _requestCache.Put(cacheKey, shoppingCartTotal);
+            if (cache)
+            {
+                _requestCache.Put(cacheKey, shoppingCartTotal);
+            }
 
             return shoppingCartTotal;
         }
 
-        public virtual async Task<ShoppingCartSubtotal> GetShoppingCartSubtotalAsync(ShoppingCart cart, bool? includeTax = null, ProductBatchContext batchContext = null)
+        public virtual async Task<ShoppingCartSubtotal> GetShoppingCartSubtotalAsync(
+            ShoppingCart cart,
+            bool? includeTax = null,
+            ProductBatchContext batchContext = null,
+            bool activeOnly = false,
+            bool cache = true)
         {
             includeTax ??= _workContext.TaxDisplayType == TaxDisplayType.IncludingTax;
+
+            if (activeOnly && cart.Items.Any(x => !x.Active))
+            {
+                cart = new(cart, cart.Items.Where(x => x.Active));
+            }
 
             var cacheKey = $"ordercalculation:cartsubtotal:{cart.GetHashCode()}-{includeTax}";
 
             // INFO: CartSubtotalRule uses AsyncLock on this method! IRequestCache.Get would deadlock cart page.
-            if (_requestCache.Contains(cacheKey))
+            if (cache && _requestCache.Contains(cacheKey))
             {
                 return _requestCache.Get<ShoppingCartSubtotal>(cacheKey, null);
             }
@@ -315,7 +330,10 @@ namespace Smartstore.Core.Checkout.Orders
                 LineItems = subtotal.LineItems
             };
 
-            _requestCache.Put(cacheKey, shoppingCartSubtotal);
+            if (cache)
+            {
+                _requestCache.Put(cacheKey, shoppingCartSubtotal);
+            }
 
             return shoppingCartSubtotal;
         }
@@ -333,6 +351,7 @@ namespace Smartstore.Core.Checkout.Orders
             return new ShoppingCartShippingTotal
             {
                 ShippingTotal = new(result.Tax.Price, _primaryCurrency),
+                Option = result.Option,
                 AppliedDiscount = result.AppliedDiscount,
                 TaxRate = result.Tax.Rate.Rate
             };
@@ -364,7 +383,7 @@ namespace Smartstore.Core.Checkout.Orders
                 }
             }
 
-            if (!cart.IsShippingRequired())
+            if (!cart.IsShippingRequired)
             {
                 return true;
             }
@@ -460,10 +479,12 @@ namespace Smartstore.Core.Checkout.Orders
         {
             Guard.NotNull(cart);
 
-            if (couponCode.IsEmpty())
+            if (couponCode.IsEmpty() || cart.Customer.IsBot())
             {
                 return (false, null);
             }
+
+            couponCode = couponCode.Trim();
 
             var discount = await _db.Discounts.FirstOrDefaultAsync(x => x.CouponCode == couponCode);
             if (discount == null || !discount.RequiresCouponCode || !await _discountService.IsDiscountValidAsync(discount, cart.Customer, couponCode))
@@ -566,17 +587,12 @@ namespace Smartstore.Core.Checkout.Orders
             var subtotalWithoutDiscountNet = 0m;
             var subtotalWithoutDiscountGross = 0m;
 
-            batchContext ??= _productService.CreateProductBatchContext(cart.Items.Select(x => x.Item.Product).ToArray(), null, customer, false);
+            batchContext ??= _productService.CreateProductBatchContext(cart.GetAllProducts(), null, customer, false);
 
             var calculationOptions = _priceCalculationService.CreateDefaultOptions(false, customer, _primaryCurrency, batchContext);
 
-            foreach (var cartItem in cart.Items)
+            foreach (var cartItem in cart.Items.Where(x => x.Item.Product != null))
             {
-                if (cartItem.Item.Product == null)
-                {
-                    continue;
-                }
-
                 var calculationContext = await _priceCalculationService.CreateCalculationContextAsync(cartItem, calculationOptions);
                 var (unitPrice, subtotal) = await _priceCalculationService.CalculateSubtotalAsync(calculationContext);
 
@@ -680,13 +696,13 @@ namespace Smartstore.Core.Checkout.Orders
                 return new() { Tax = Tax.Tax.Zero };
             }
 
-            var (shippingTotalAmount, appliedDiscount) = await GetAdjustedShippingTotalAsync(cart);
-            if (!shippingTotalAmount.HasValue)
+            var shipping = await GetAdjustedShippingTotalAsync(cart);
+            if (shipping == null)
             {
                 return null;
             }
 
-            var shippingAmount = _roundingHelper.RoundIfEnabledFor(Math.Max(shippingTotalAmount.Value, 0m));
+            shipping.Amount = _roundingHelper.RoundIfEnabledFor(Math.Max(shipping.Amount, 0m));
 
             await PrepareAuxiliaryServicesTaxingInfosAsync(cart);
 
@@ -717,12 +733,9 @@ namespace Smartstore.Core.Checkout.Orders
             //{
 
             var taxCategoryId = GetTaxCategoryId(cart, _taxSettings.ShippingTaxClassId);
+            shipping.Tax = await _taxCalculator.CalculateShippingTaxAsync(shipping.Amount, includeTax, taxCategoryId, cart.Customer);
 
-            return new()
-            {
-                Tax = await _taxCalculator.CalculateShippingTaxAsync(shippingAmount, includeTax, taxCategoryId, cart.Customer),
-                AppliedDiscount = appliedDiscount
-            };
+            return shipping;
         }
 
         protected virtual async Task<(decimal Amount, TaxRatesDictionary TaxRates)> GetCartTaxTotalAsync(ShoppingCart cart, bool includePaymentFee)
@@ -756,10 +769,10 @@ namespace Smartstore.Core.Checkout.Orders
             // Shipping tax amount.
             if (_taxSettings.ShippingIsTaxable && !await IsFreeShippingAsync(cart))
             {
-                var (shippingTotalAmount, _) = await GetAdjustedShippingTotalAsync(cart);
-                if (shippingTotalAmount.HasValue)
+                var shipping = await GetAdjustedShippingTotalAsync(cart);
+                if (shipping != null)
                 {
-                    var shippingTotal = _roundingHelper.RoundIfEnabledFor(Math.Max(shippingTotalAmount.Value, 0m));
+                    shipping.Amount = _roundingHelper.RoundIfEnabledFor(Math.Max(shipping.Amount, 0m));
 
                     await PrepareAuxiliaryServicesTaxingInfosAsync(cart);
 
@@ -777,7 +790,7 @@ namespace Smartstore.Core.Checkout.Orders
                     //{
 
                     var taxCategoryId = GetTaxCategoryId(cart, _taxSettings.ShippingTaxClassId);
-                    var tax = await _taxCalculator.CalculateShippingTaxAsync(shippingTotal, null, taxCategoryId, customer);
+                    var tax = await _taxCalculator.CalculateShippingTaxAsync(shipping.Amount, null, taxCategoryId, customer);
                     var taxRate = tax.Rate.Rate;
 
                     shippingTax = _roundingHelper.RoundIfEnabledFor(Math.Max(tax.Amount, 0m));
@@ -991,45 +1004,37 @@ namespace Smartstore.Core.Checkout.Orders
             return charge;
         }
 
-        protected virtual async Task<(decimal? Amount, Discount AppliedDiscount)> GetAdjustedShippingTotalAsync(ShoppingCart cart)
+        protected virtual async Task<CartShipping> GetAdjustedShippingTotalAsync(ShoppingCart cart)
         {
-            var shippingOption = cart.Customer?.GenericAttributes?.SelectedShippingOption?.Convert<ShippingOption>();
-
-            if (shippingOption != null)
+            var shipping = new CartShipping
             {
-                // Use last shipping option (get from cache).
-                var shippingMethods = await _shippingService.GetAllShippingMethodsAsync(cart.StoreId);
+                Option = cart.Customer.GenericAttributes?.SelectedShippingOption
+            };
 
-                return await AdjustShippingRateAsync(cart, shippingOption.Rate, shippingOption, shippingMethods);
-            }
-            else
+            if (shipping.Option == null)
             {
                 await _db.LoadReferenceAsync(cart.Customer, x => x.ShippingAddress);
 
-                // Use fixed rate (if possible).
-                var shippingAddress = cart.Customer?.ShippingAddress ?? null;
-                var shippingRateComputationMethods = _shippingService.LoadEnabledShippingProviders(cart.StoreId);
-
-                if (!shippingRateComputationMethods.Any())
+                var response = await _shippingService.GetShippingOptionsAsync(cart, cart.Customer.ShippingAddress, null, cart.StoreId);
+                if (response.Success && response.ShippingOptions.Count > 0)
                 {
-                    throw new InvalidOperationException(T("Shipping.CouldNotLoadMethod"));
-                }
-
-                if (shippingRateComputationMethods.Count() == 1)
-                {
-                    var shippingRateComputationMethod = shippingRateComputationMethods.First();
-                    var getShippingOptionRequest = _shippingService.CreateShippingOptionRequest(cart, shippingAddress, cart.StoreId);
-                    var fixedRate = await shippingRateComputationMethod.Value.GetFixedRateAsync(getShippingOptionRequest);
-
-                    if (fixedRate.HasValue)
-                    {
-                        // Ignore returned currency. The caller specifies it to avoid mixed currencies during calculation.
-                        return await AdjustShippingRateAsync(cart, fixedRate.Value, null, null);
-                    }
+                    shipping.Option = response.ShippingOptions[0];
                 }
             }
 
-            return (null, null);
+            if (shipping.Option != null)
+            {
+                // INFO: it is not necessary to set "matchRules" to True here. This is already done by GetShippingOptionsAsync,
+                // i.e. only options of shipping methods that fulfill rules are taken into account.
+                var shippingMethods = await _shippingService.GetAllShippingMethodsAsync(cart.StoreId);
+
+                // Ignore returned currency. The caller used it to avoid mixed currencies during calculation.
+                (shipping.Amount, shipping.AppliedDiscount) = await AdjustShippingRateAsync(cart, shipping.Option.Rate, shipping.Option, shippingMethods);
+
+                return shipping;
+            }
+
+            return null;
         }
 
         protected virtual async Task<decimal> GetCartPaymentFeeAsync(ShoppingCart cart, string paymentMethodSystemName)
@@ -1125,14 +1130,17 @@ namespace Smartstore.Core.Checkout.Orders
                 => _includeTax ? DiscountAmountGross : DiscountAmountNet;
 
             public Discount AppliedDiscount { get; set; }
-            public TaxRatesDictionary TaxRates { get; set; } = new();
-            public List<ShoppingCartLineItem> LineItems { get; set; } = new();
+            public TaxRatesDictionary TaxRates { get; set; } = [];
+            public List<ShoppingCartLineItem> LineItems { get; set; } = [];
         }
 
         protected class CartShipping
         {
+            public decimal Amount { get; set; }
             public Tax.Tax Tax { get; set; }
+
             public Discount AppliedDiscount { get; set; }
+            public ShippingOption Option { get; set; }
         }
 
         protected class CartTaxingInfo

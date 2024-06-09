@@ -252,10 +252,16 @@
 		}
 
 		// Create tooltip for ExecuteTasks button which informs
-		// about modules to be installed and uninstalled
-		btnExecuteTasks.tooltip({
-			html: true,
-			placement: 'bottom',
+        // about modules to be installed and uninstalled
+        btnExecuteTasks.tooltip({
+            html: true,
+            placement: 'bottom',
+            popperConfig: {
+                modifiers: {
+                    flip: { enabled: false },
+                    arrow: { element: '.arrow' }
+                }
+            },
 			title: function () {
 				let text = '';
 
@@ -272,7 +278,7 @@
 					_.each(dropdownInstall.val(), function (val, i) {
 						text += '<div class="al">{0}</div>'.format(getModuleFriendlyName(dropdownInstall, val));
 					});
-				}
+                }
 
 				return text;
 			}
@@ -541,7 +547,9 @@
                         </a>
 
                         <!-- License badge -->
-                        <partial name="LicenseLabel" model="module.LicenseLabel" />
+                        <div class="license-label">
+                            <partial name="LicenseLabel" model="module.LicenseLabel" />
+                        </div>
 
                         <!-- Actions dropdown -->
                         <div sm-if="module.Installed" class="module-actions dropdown">

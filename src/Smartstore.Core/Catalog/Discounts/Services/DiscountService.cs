@@ -1,9 +1,11 @@
-﻿using Smartstore.Caching;
+﻿using System.Text;
+using Smartstore.Caching;
 using Smartstore.Collections;
 using Smartstore.Core.Checkout.Cart;
 using Smartstore.Core.Checkout.Rules;
 using Smartstore.Core.Data;
 using Smartstore.Core.Identity;
+using Smartstore.Core.Rules;
 using Smartstore.Core.Stores;
 using Smartstore.Data.Hooks;
 using EState = Smartstore.Data.EntityState;
@@ -13,28 +15,28 @@ namespace Smartstore.Core.Catalog.Discounts
     public partial class DiscountService : AsyncDbSaveHook<Discount>, IDiscountService
     {
         // {0} = discountType, {1} = includeHidden, {2} = couponCode.
-        const string DiscountsAllKey = "discount.all-{0}-{1}-{2}";
+        private readonly static CompositeFormat DiscountsAllKey = CompositeFormat.Parse("discount.all-{0}-{1}-{2}");
         internal const string DiscountsPatternKey = "discount.*";
 
         private readonly SmartDbContext _db;
         private readonly IRequestCache _requestCache;
         private readonly IStoreContext _storeContext;
         private readonly ICartRuleProvider _cartRuleProvider;
-        private readonly Lazy<IShoppingCartService> _cartService;
-        private readonly Dictionary<DiscountKey, bool> _discountValidityCache = new();
+        private readonly Lazy<IShoppingCartService> _cartService ;
+        private readonly Dictionary<DiscountKey, bool> _discountValidityCache = [];
         private readonly Multimap<string, int> _relatedEntityIds = new(items => new HashSet<int>(items));
 
         public DiscountService(
             SmartDbContext db,
             IRequestCache requestCache,
             IStoreContext storeContext,
-            ICartRuleProvider cartRuleProvider,
+            IRuleProviderFactory ruleProviderFactory,
             Lazy<IShoppingCartService> cartService)
         {
             _db = db;
             _requestCache = requestCache;
             _storeContext = storeContext;
-            _cartRuleProvider = cartRuleProvider;
+            _cartRuleProvider = ruleProviderFactory.GetProvider<ICartRuleProvider>(RuleScope.Cart);
             _cartService = cartService;
         }
 
@@ -199,9 +201,9 @@ namespace Smartstore.Core.Catalog.Discounts
         }
 
         public virtual async Task<bool> IsDiscountValidAsync(
-            Discount discount, 
-            Customer customer, 
-            string couponCodeToValidate, 
+            Discount discount,
+            Customer customer,
+            string couponCodeToValidate,
             Store store = null,
             DiscountValidationFlags flags = DiscountValidationFlags.All)
         {
@@ -216,7 +218,7 @@ namespace Smartstore.Core.Catalog.Discounts
             }
 
             // Check coupon code.
-            if (discount.RequiresCouponCode && (discount.CouponCode.IsEmpty() || !discount.CouponCode.EqualsNoCase(couponCodeToValidate)))
+            if (discount.RequiresCouponCode && (discount.CouponCode.IsEmpty() || !discount.CouponCode.Trim().EqualsNoCase(couponCodeToValidate)))
             {
                 return Cached(false);
             }
@@ -235,7 +237,7 @@ namespace Smartstore.Core.Catalog.Discounts
             ShoppingCart cart = null;
 
             // Do not to apply discounts if there are gift cards in the cart cause the customer could "earn" money through that.
-            if (flags.HasFlag(DiscountValidationFlags.GiftCards) && 
+            if (flags.HasFlag(DiscountValidationFlags.GiftCards) &&
                 (discount.DiscountType == DiscountType.AssignedToOrderTotal || discount.DiscountType == DiscountType.AssignedToOrderSubTotal))
             {
                 cart = await _cartService.Value.GetCartAsync(customer, ShoppingCartType.ShoppingCart, store.Id);
@@ -347,7 +349,7 @@ namespace Smartstore.Core.Catalog.Discounts
                     return false;
             }
         }
-        
+
         class DiscountKey : Tuple<Discount, Customer, string, Store, DiscountValidationFlags>
         {
             public DiscountKey(Discount discount, Customer customer, string customerCouponCode, Store store, DiscountValidationFlags flags)

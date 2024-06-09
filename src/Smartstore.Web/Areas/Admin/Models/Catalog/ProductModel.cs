@@ -1,7 +1,6 @@
 ﻿using System.ComponentModel.DataAnnotations;
 using System.Runtime.Serialization;
 using FluentValidation;
-using Microsoft.AspNetCore.Http;
 using Smartstore.ComponentModel;
 using Smartstore.Core.Catalog.Attributes;
 using Smartstore.Core.Catalog.Discounts;
@@ -9,8 +8,10 @@ using Smartstore.Core.Catalog.Products;
 using Smartstore.Core.Content.Media;
 using Smartstore.Core.Localization;
 using Smartstore.Core.Seo;
-using Smartstore.Core.Web;
 
+// TODO: (mg) way too many classes for one file. Move all attribute models to a subfolder "Attributes"
+// after Conditional Attributes are completed. No need to make all these "nested".
+// TODO: (mg) DRY: ProductModel.ProductVariantAttributeValueModel -> ProductAttributeOptionModelBase.
 namespace Smartstore.Admin.Models.Catalog
 {
     [LocalizedDisplay("Admin.Catalog.Products.Fields.")]
@@ -241,6 +242,9 @@ namespace Smartstore.Admin.Models.Catalog
         [LocalizedDisplay("*AttributeChoiceBehaviour")]
         public AttributeChoiceBehaviour AttributeChoiceBehaviour { get; set; }
 
+        [LocalizedDisplay("*AttributeCombinationRequired")]
+        public bool AttributeCombinationRequired { get; set; }
+
         [LocalizedDisplay("*ComparePriceLabelId")]
         public int? ComparePriceLabelId { get; set; }
 
@@ -248,7 +252,7 @@ namespace Smartstore.Admin.Models.Catalog
         public string BaseDimensionIn { get; set; }
         public string BaseWeightIn { get; set; }
 
-        public List<ProductLocalizedModel> Locales { get; set; } = new();
+        public List<ProductLocalizedModel> Locales { get; set; } = [];
 
         [UIHint("CustomerRoles")]
         [AdditionalMetadata("multiple", true)]
@@ -268,7 +272,7 @@ namespace Smartstore.Admin.Models.Catalog
         [LocalizedDisplay("*HasPreviewPicture")]
         public bool HasPreviewPicture { get; set; }
         public ProductPictureModel AddPictureModel { get; set; } = new();
-        public List<ProductMediaFile> ProductMediaFiles { get; set; } = new();
+        public List<ProductMediaFile> ProductMediaFiles { get; set; } = [];
 
         [UIHint("Discounts")]
         [AdditionalMetadata("multiple", true)]
@@ -277,6 +281,7 @@ namespace Smartstore.Admin.Models.Catalog
         public int[] SelectedDiscountIds { get; set; }
 
         public AddProductSpecificationAttributeModel AddSpecificationAttributeModel { get; set; } = new();
+        public GroupedProductConfigurationModel GroupedProductConfiguration { get; set; } = new();
 
         //BasePrice
         [LocalizedDisplay("*BasePriceEnabled")]
@@ -527,20 +532,13 @@ namespace Smartstore.Admin.Models.Catalog
 
             [LocalizedDisplay("Admin.Catalog.Products.ProductVariantAttributes.Attributes.Values")]
             public string EditUrl { get; set; }
-            public string EditText { get; set; }
-            public List<object> OptionSets { get; set; } = new();
-            public int ValueCount { get; set; }
+            public string EditLinkText { get; set; }
+            public List<object> OptionSets { get; set; } = [];
+
+            public int NumberOfOptions { get; set; }
+            public int NumberOfRules { get; set; }
         }
 
-        public class ProductVariantAttributeValueListModel : ModelBase
-        {
-            public int ProductId { get; set; }
-            public string ProductName { get; set; }
-            public int ProductVariantAttributeId { get; set; }
-            public string ProductVariantAttributeName { get; set; }
-        }
-
-        // TODO: DRY. see ProductAttributeOptionModelBase
         [LocalizedDisplay("Admin.Catalog.Products.ProductVariantAttributes.Attributes.Values.Fields.")]
         public class ProductVariantAttributeValueModel : EntityModelBase, ILocalizedModel<ProductVariantAttributeValueLocalizedModel>
         {
@@ -562,7 +560,7 @@ namespace Smartstore.Admin.Models.Catalog
 
             [LocalizedDisplay("*Picture")]
             [UIHint("Media")]
-            [AdditionalMetadata("album", "catalog"), AdditionalMetadata("transientUpload", true)]
+            [AdditionalMetadata("album", "catalog"), AdditionalMetadata("transientUpload", true), AdditionalMetadata("entityType", "ProductVariantAttributeValue")]
             public int PictureId { get; set; }
 
             [LocalizedDisplay("*PriceAdjustment")]
@@ -662,10 +660,8 @@ namespace Smartstore.Admin.Models.Catalog
 
     public partial class ProductModelValidator : SmartValidator<ProductModel>
     {
-        public ProductModelValidator(SmartDbContext db, IHttpContextAccessor httpContextAccessor, Localizer T)
+        public ProductModelValidator(SmartDbContext db, Localizer T)
         {
-            var viewData = httpContextAccessor.HttpContext.RequestServices.GetRequiredService<IViewDataAccessor>().ViewData;
-
             ApplyEntityRules<Product>(db);
             //ApplyNonNullableValueTypeRules();
 
@@ -705,6 +701,17 @@ namespace Smartstore.Admin.Models.Catalog
                     .NotEmpty()
                     .When(x => x.NewVersionDownloadId != null && x.NewVersionDownloadId != 0)
                     .WithMessage(T("Admin.Catalog.Products.Download.SemanticVersion.NotValid"));
+            });
+
+            When(x => x.ProductTypeId == (int)ProductType.GroupedProduct, () =>
+            {
+                RuleFor(x => x.GroupedProductConfiguration.PageSize)
+                    .GreaterThan(0)
+                    .When(x => x.GroupedProductConfiguration.PageSize != null);
+
+                RuleFor(x => x.GroupedProductConfiguration.SearchMinAssociatedCount)
+                    .GreaterThanOrEqualTo(0)
+                    .When(x => x.GroupedProductConfiguration.SearchMinAssociatedCount != null);
             });
         }
     }

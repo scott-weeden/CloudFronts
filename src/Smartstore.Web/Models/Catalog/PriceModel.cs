@@ -5,7 +5,6 @@ namespace Smartstore.Web.Models.Catalog
 {
     public class PriceModel : ModelBase
     {
-        public CalculatedPrice CalculatedPrice { get; set; }
         public Money FinalPrice { get; set; }
         public ComparePriceModel RegularPrice { get; set; }
         public ComparePriceModel RetailPrice { get; set; }
@@ -17,15 +16,12 @@ namespace Smartstore.Web.Models.Catalog
         public bool IsBasePriceEnabled { get; set; }
         public string BasePriceInfo { get; set; }
 
+        public bool HasCalculation { get; set; }
         public bool CallForPrice { get; set; }
+        public bool CustomerEntersPrice { get; set; }
         public bool ShowRetailPriceSaving { get; set; }
 
-        public List<ProductBadgeModel> Badges { get; } = new();
-
-        public bool HasCalculation
-        {
-            get => CalculatedPrice != null;
-        }
+        public List<ProductBadgeModel> Badges { get; } = [];
 
         public bool HasDiscount
         {
@@ -45,12 +41,11 @@ namespace Smartstore.Web.Models.Catalog
     public class ProductDetailsPriceModel : PriceModel
     {
         public LocalizedString CountdownText { get; set; }
-        public bool CustomerEntersPrice { get; set; }
         public bool HidePrices { get; set; }
         public bool ShowLoginNote { get; set; }
         public bool BundleItemShowBasePrice { get; set; }
 
-        public List<TierPriceModel> TierPrices { get; set; } = new();
+        public List<TierPriceModel> TierPrices { get; set; } = [];
     }
 
     public class ComparePriceModel

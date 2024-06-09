@@ -12,7 +12,7 @@
             $.ajax({
                 type: 'POST',
                 url: container.data("validate-cart-url"),
-                data: $('#startcheckout').closest('form').serialize(),
+                data: $('#stripe-payment-request-button').closest('form').serialize(),
                 cache: false,
                 success: function (resp) {
                     if (resp.success) {
@@ -31,24 +31,21 @@
     }
 
     return {
-        initPaymentElement: function (publicApiKey, secret, apiVersion) {
-            stripe = Stripe(publicApiKey, {
-                apiVersion: apiVersion,
-                betas: ['elements_enable_deferred_intent_beta_1'],
-            });
+        initPaymentElement: function (publicApiKey, apiVersion, amount, currency, captureMethod) {
+            stripe = Stripe(publicApiKey, { apiVersion: apiVersion });
 
-            const { clientSecret } = { clientSecret: secret };
-
-            const appearance = {
-                theme: 'stripe',
+            const options = {
+                mode: 'payment',
+                amount: amount,
+                currency: currency,
+                captureMethod: captureMethod,
+                appearance: { theme: 'stripe' },
+                paymentMethodCreation: "manual"
             };
 
-            elements = stripe.elements({ appearance, clientSecret });
+            elements = stripe.elements(options);
 
-            const paymentElementOptions = {
-                layout: "tabs",
-            };
-
+            const paymentElementOptions = { layout: "tabs" };
             const paymentElement = elements.create("payment", paymentElementOptions);
             paymentElement.mount(paymentElementSelector);
 
@@ -65,11 +62,7 @@
 
             // Listen for changes to the radio input elements.
             $(document, "input[name='paymentmethod']").on("change", function (e) {
-                if (e.target.value == moduleSystemName) {
-                    btnNext[0].disabled = true;
-                } else {
-                    btnNext[0].disabled = false;
-                }
+                btnNext[0].disabled = e.target.value == moduleSystemName;
             });
 
             // Handle button state on page load
@@ -83,10 +76,17 @@
             $("form").on("submit", async e => {
                 if ($("input[name='paymentmethod']:checked").val() == moduleSystemName && !createdPaymentMethod) {
                     e.preventDefault();
+
+                    // Trigger form validation and wallet collection
+                    const { error: submitError } = await elements.submit();
+                    if (submitError) {
+                        displayNotification(submitError.message, 'error');
+                        return;
+                    }
+
                     (async () => {
-                        const { error, paymentMethod } = await stripe.createPaymentMethod({
-                            elements
-                        });
+                        const { error, paymentMethod } = await stripe.createPaymentMethod({ elements });
+
                         $.ajax({
                             type: 'POST',
                             data: {
@@ -103,17 +103,14 @@
                 }
             });
         },
-        initWalletButtonElement: function (publicApiKey, requestData, apiVersion) {
+        initWalletButtonElement: function (publicApiKey, requestData, isCartPage, apiVersion) {
             stripe = Stripe(publicApiKey, {
                 apiVersion: apiVersion,
             });
 
             const paymentRequest = stripe.paymentRequest(requestData);
-
             const elements = stripe.elements();
-            const prButton = elements.create('paymentRequestButton', {
-                paymentRequest,
-            });
+            const prButton = elements.create('paymentRequestButton', { paymentRequest });
 
             (async () => {
                 // Check the availability of the Payment Request API first.
@@ -133,10 +130,17 @@
                     async: false,   // IMPORTANT INFO: we must wait to get the correct cart value.
                     type: 'POST',
                     url: paymentRequestButton.data("get-current-payment-request-url"),
+                    data: $('#stripe-payment-request-button').closest('form').serialize(),
                     dataType: 'json',
                     success: function (data) {
                         if (data.success) {
                             paymentRequest.update(JSON.parse(data.paymentRequest))
+                        }
+                        else {
+                            // This prevents the stripe terminal from opening.
+                            event.preventDefault();
+
+                            displayNotification(data.message, 'error');
                         }
                     }
                 });
@@ -171,6 +175,32 @@
                     }
                 })
             });
+
+            if (isCartPage) {
+                $(document).on('shoppingCartRefresh', function (e) {
+                    if (e.success) {
+                        var total = $('#CartSummaryTotal').data('total');
+                        if (total == 0.0) {
+                            total = $('#CartSummarySubtotal').data('subtotal');
+                        }
+
+                        // Convert total to smallest currency unit.
+                        total = total * 100;
+
+                        // Update payment request.
+                        paymentRequest.update({ total: { label: "Updated total", amount: total } });
+                    }
+                });
+            }
+            else {
+                EventBroker.subscribe("ajaxcart.updated", function (msg, data) {
+                    // Convert total to smallest currency unit.
+                    var total = data.SubTotalValue * 100;
+
+                    // Update payment request.
+                    paymentRequest.update({ total: { label: "Updated total", amount: total } });
+                });
+            }
         }
     };
 })();

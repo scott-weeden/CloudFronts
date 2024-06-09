@@ -1,5 +1,4 @@
-﻿using DotLiquid.FileSystems;
-using Microsoft.AspNetCore.Http;
+﻿using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc.ViewFeatures;
 using Microsoft.AspNetCore.Routing;
 using Smartstore.Core.Catalog;
@@ -215,8 +214,7 @@ namespace Smartstore.Web.Controllers
         /// </summary>
         private async Task PrepareAvailablePaymentMethodsAsync()
         {
-            // Get available payment methods
-            if (!_paymentSettings.ProductDetailPaymentMethodSystemNames.HasValue())
+            if (_paymentSettings.ProductDetailPaymentMethodSystemNames.IsNullOrEmpty())
             {
                 return;
             } 
@@ -230,9 +228,8 @@ namespace Smartstore.Web.Controllers
                     
                 // Get all providers.
                 var providers = _providerManager.Value.GetAllProviders<IPaymentMethod>();
-                var productDetailMethods = _paymentSettings.ProductDetailPaymentMethodSystemNames.Convert<string[]>();
 
-                foreach (var systemName in productDetailMethods)
+                foreach (var systemName in _paymentSettings.ProductDetailPaymentMethodSystemNames)
                 {
                     var provider = providers.Where(x => x.Metadata.SystemName == systemName).FirstOrDefault();
 
@@ -326,25 +323,51 @@ namespace Smartstore.Web.Controllers
         }
 
         /// <summary>
-        /// This action is used to update the display of product detail view.
-        /// It will be called via AJAX upon user interaction (e.g. changing of quantity || attribute selection).
-        /// All relevasnt product partials will be rendered with updated models and returned as JSON data.
+        /// AJAX. Gets associated products of a grouped product when a paginator link has been clicked.
+        /// </summary>
+        /// <param name="id">Identifier of the grouped product.</param>
+        /// <param name="page">One based page index.</param>
+        /// <param name="q">Optional search term.</param>
+        public async Task<IActionResult> AssociatedProducts(int id, int page, string q)
+        {
+            var content = string.Empty;
+            var product = await _db.Products
+                .AsNoTracking()
+                .SelectSummary()
+                .FirstOrDefaultAsync(x => x.Id == id);
+
+            if (product != null)
+            {
+                var ctx = await _helper.CreateModelContext(product, new());
+                var model = await _helper.CreateGroupedProductModelAsync(ctx, page, q);
+
+                content = await InvokePartialViewAsync("Product.AssociatedProducts", model);
+            }
+
+            return new JsonResult(new { content });
+        }
+
+        /// <summary>
+        /// AJAX. This method updates parts of the product detail page on user interactions
+        /// such as quantity changes or attribute selection.
         /// </summary>
         [HttpPost]
-        public async Task<IActionResult> UpdateProductDetails(int productId, string itemType, int bundleItemId, ProductVariantQuery query)
+        public async Task<IActionResult> UpdateProductDetails(
+            string itemType,
+            int productId, 
+            int? parentProductId,
+            int bundleItemId, 
+            ProductVariantQuery query)
         {
             // TODO: (core) UpdateProductDetails action needs some decent refactoring.
             var form = HttpContext.Request.Form;
             var quantity = 1;
             var galleryStartIndex = -1;
-            string galleryHtml = null;
-            string dynamicThumbUrl = null;
+            var galleryHtml = (string)null;
+            var dynamicThumbUrl = (string)null;
             var isAssociated = itemType.EqualsNoCase("associateditem");
-            var currency = Services.WorkContext.WorkingCurrency;
-            var displayPrices = await Services.Permissions.AuthorizeAsync(Permissions.Catalog.DisplayPrice);
 
             var product = await _db.Products.FindByIdAsync(productId);
-            var batchContext = _productService.CreateProductBatchContext(new[] { product }, includeHidden: false);
             var bundleItem = await _db.ProductBundleItem
                 .Include(x => x.Product)
                 .Include(x => x.BundleProduct)
@@ -352,85 +375,62 @@ namespace Smartstore.Web.Controllers
                 .FindByIdAsync(bundleItemId, false);
 
             // Quantity required for tier prices.
-            string quantityKey = form.Keys.FirstOrDefault(k => k.EndsWith("EnteredQuantity"));
+            var quantityKey = form.Keys.FirstOrDefault(k => k.EndsWith("EnteredQuantity"));
             if (quantityKey.HasValue())
             {
                 _ = int.TryParse(form[quantityKey], out quantity);
             }
 
-            var modelContext = new ProductDetailsModelContext
-            {
-                Product = product,
-                BatchContext = batchContext,
-                VariantQuery = query,
-                IsAssociatedProduct = isAssociated,
-                ProductBundleItem = bundleItem,
-                Customer = batchContext.Customer,
-                Store = batchContext.Store,
-                Currency = currency,
-                DisplayPrices = displayPrices
-            };
+            var ctx = await _helper.CreateModelContext(product, query, bundleItem, isAssociated, parentProductId);
+            var hasAssociatedHeader = isAssociated && (ctx.GroupedProductConfiguration?.Collapsible ?? _catalogSettings.CollapsibleAssociatedProducts);
 
             // Get merged model data.
             var model = new ProductDetailsModel();
-            await _helper.PrepareProductDetailModelAsync(model, modelContext, quantity, callCustomMapper: true);
+            await _helper.PrepareProductDetailModelAsync(model, ctx, quantity, callCustomMapper: true);
 
             if (bundleItem != null)
             {
-                // Update bundle item thumbnail.
                 if (!bundleItem.HideThumbnail)
                 {
-                    var assignedMediaIds = model.SelectedCombination?.GetAssignedMediaIds() ?? Array.Empty<int>();
-
-                    if (assignedMediaIds.Any() && await _db.MediaFiles.AnyAsync(x => x.Id == assignedMediaIds[0]))
-                    {
-                        var file = await _db.ProductMediaFiles
-                            .AsNoTracking()
-                            .Include(x => x.MediaFile)
-                            .ApplyProductFilter(bundleItem.ProductId)
-                            .FirstOrDefaultAsync();
-
-                        dynamicThumbUrl = _mediaService.GetUrl(file?.MediaFile, _mediaSettings.BundledProductPictureSize, null, false);
-                    }
+                    // Update bundle item thumbnail.
+                    var file = await GetSelectedAttributeImage();
+                    dynamicThumbUrl = file != null ? _mediaService.GetUrl(file, _mediaSettings.BundledProductPictureSize, null, false) : null;
                 }
             }
             else if (isAssociated)
             {
                 // Update associated product thumbnail.
-                var assignedMediaIds = model.SelectedCombination?.GetAssignedMediaIds() ?? Array.Empty<int>();
+                var file = await GetSelectedAttributeImage();
+                dynamicThumbUrl = file != null ? _mediaService.GetUrl(file, _mediaSettings.AssociatedProductPictureSize, null, false) : null;
 
-                if (assignedMediaIds.Any() && await _db.MediaFiles.AnyAsync(x => x.Id == assignedMediaIds[0]))
+                var headerFields = ctx.GroupedProductConfiguration.HeaderFields ?? _catalogSettings.CollapsibleAssociatedProductsHeaders ?? [];
+                if (hasAssociatedHeader && headerFields.Any(x => x.EqualsNoCase(AssociatedProductHeader.Image)))
                 {
-                    var file = await _db.ProductMediaFiles
-                        .AsNoTracking()
-                        .Include(x => x.MediaFile)
-                        .ApplyProductFilter(productId)
-                        .FirstOrDefaultAsync();
+                    // Render associated product thumbnail in collapsible header.
+                    var files = file != null
+                        ? [_mediaService.ConvertMediaFile(file)]
+                        : (await LoadFiles()).Select(x => _mediaService.ConvertMediaFile(x.MediaFile)).ToList();
 
-                    dynamicThumbUrl = _mediaService.GetUrl(file?.MediaFile, _mediaSettings.AssociatedProductPictureSize, null, false);
+                    model.MediaGalleryModel = _helper.PrepareProductDetailsMediaGalleryModel(
+                        files,
+                        product.GetLocalized(x => x.Name),
+                        null,
+                        true,
+                        bundleItem,
+                        model.SelectedCombination);
                 }
             }
             else if (product.ProductType != ProductType.BundledProduct)
             {
                 // Update image gallery.
-                var files = await _db.ProductMediaFiles
-                    .AsNoTracking()
-                    .Include(x => x.MediaFile)
-                    .ApplyProductFilter(productId)
-                    .ToListAsync();
-
-                if (product.HasPreviewPicture && files.Count > 1)
-                {
-                    files.RemoveAt(0);
-                }
-
+                var files = await LoadFiles();
                 if (files.Count <= _catalogSettings.DisplayAllImagesNumber)
                 {
                     // All pictures rendered... only index is required.
                     galleryStartIndex = 0;
 
-                    var assignedMediaIds = model.SelectedCombination?.GetAssignedMediaIds() ?? Array.Empty<int>();
-                    if (assignedMediaIds.Any())
+                    var assignedMediaIds = model.SelectedCombination?.GetAssignedMediaIds();
+                    if (!assignedMediaIds.IsNullOrEmpty())
                     {
                         var file = files.FirstOrDefault(p => p.MediaFileId == assignedMediaIds[0]);
                         galleryStartIndex = file == null ? 0 : files.IndexOf(file);
@@ -470,30 +470,68 @@ namespace Smartstore.Web.Controllers
             }
             else
             {
-                var dataDictAddToCart = new ViewDataDictionary<ProductDetailsModel>(ViewData, model);
-                dataDictAddToCart.TemplateInfo.HtmlFieldPrefix = $"addtocart_{model.Id}";
-
                 partials = new
                 {
                     Attrs = await InvokePartialViewAsync("Product.Attrs", model),
                     Price = await InvokePartialViewAsync("Product.Offer.Price", model),
                     Stock = await InvokePartialViewAsync("Product.StockInfo", model),
                     Variants = await InvokePartialViewAsync("Product.Variants", model.ProductVariantAttributes),
-                    OfferActions = await InvokePartialViewAsync("Product.Offer.Actions", dataDictAddToCart),
+                    OfferActions = await InvokePartialViewAsync("Product.Offer.Actions", CreateViewDataFor("OfferActions")),
                     TierPrices = await InvokePartialViewAsync("Product.TierPrices", model.Price.TierPrices),
-                    BundlePrice = product.ProductType == ProductType.BundledProduct ? await InvokePartialViewAsync("Product.Bundle.Price", model) : null
+                    BundlePrice = product.ProductType == ProductType.BundledProduct ? await InvokePartialViewAsync("Product.Bundle.Price", model) : null,
+                    AssociatedHeader = hasAssociatedHeader ? await InvokePartialViewAsync("Product.AssociatedProduct.Header", CreateViewDataFor("AssociatedHeader")) : null
                 };
             }
 
-            object data = new
+            return new JsonResult(new
             {
                 Partials = partials,
                 DynamicThumblUrl = dynamicThumbUrl,
                 GalleryStartIndex = galleryStartIndex,
                 GalleryHtml = galleryHtml
-            };
+            });
 
-            return new JsonResult(data);
+            #region Utilities
+
+            async Task<List<ProductMediaFile>> LoadFiles()
+            {
+                var files = await _db.ProductMediaFiles
+                    .AsNoTracking()
+                    .Include(x => x.MediaFile)
+                    .ApplyProductFilter(product.Id)
+                    .ToListAsync();
+
+                if (product.HasPreviewPicture && files.Count > 1)
+                {
+                    files.RemoveAt(0);
+                }
+
+                return files;
+            }
+
+            ValueTask<MediaFile> GetSelectedAttributeImage()
+            {
+                var assignedMediaIds = model.SelectedCombination?.GetAssignedMediaIds();
+
+                return !assignedMediaIds.IsNullOrEmpty()
+                    ? _db.MediaFiles.FindByIdAsync(assignedMediaIds[0], false)
+                    : new ValueTask<MediaFile>();
+            }
+
+            ViewDataDictionary CreateViewDataFor(string partial)
+            {
+                var vd = new ViewDataDictionary<ProductDetailsModel>(ViewData, model);
+                vd.TemplateInfo.HtmlFieldPrefix = $"addtocart_{model.Id}";
+
+                if (isAssociated && partial == "AssociatedHeader")
+                {
+                    vd["GroupedProductConfiguration"] = ctx.GroupedProductConfiguration;
+                }
+
+                return vd;
+            }
+
+            #endregion
         }
 
         #endregion
@@ -698,12 +736,15 @@ namespace Smartstore.Web.Controllers
         public async Task<IActionResult> AskQuestion(int id)
         {
             if (!_catalogSettings.AskQuestionEnabled)
+            {
                 return NotFound();
+            }
 
             var product = await _db.Products.FindByIdAsync(id, false);
-
             if (product == null || product.IsSystemProduct || !product.Published)
+            {
                 return NotFound();
+            }
 
             var model = await PrepareAskQuestionModelAsync(product);
 
@@ -712,21 +753,21 @@ namespace Smartstore.Web.Controllers
 
         public async Task<IActionResult> AskQuestionAjax(int id, ProductVariantQuery query)
         {
+            if (id == 0)
+            {
+                return NotFound();
+            }
+
             // Get rawAttributes from product variant query
-            if (query != null && id > 0)
+            if (query != null)
             {
                 var attributes = await _db.ProductVariantAttributes
                     .Include(x => x.ProductAttribute)
                     .ApplyProductFilter(new[] { id })
                     .ToListAsync();
 
-                var selection = await _productAttributeMaterializer.Value.CreateAttributeSelectionAsync(query, attributes, id, 0, false);
-                var rawAttributes = selection.Selection.AsJson();
-
-                if (rawAttributes.HasValue() && TempData["AskQuestionAttributeSelection-" + id] == null)
-                {
-                    TempData.Add("AskQuestionAttributeSelection-" + id, rawAttributes);
-                }
+                var (selection, _) = await _productAttributeMaterializer.Value.CreateAttributeSelectionAsync(query, attributes, id, 0, false);
+                TempData["AskQuestionAttributeSelection-" + id] = selection.AsJson();
             }
 
             return new JsonResult(new { redirect = Url.Action("AskQuestion", new { id }) });
@@ -738,12 +779,15 @@ namespace Smartstore.Web.Controllers
         public async Task<IActionResult> AskQuestionSend(ProductAskQuestionModel model, string captchaError)
         {
             if (!_catalogSettings.AskQuestionEnabled)
+            {
                 return NotFound();
+            }
 
             var product = await _db.Products.FindByIdAsync(model.Id, false);
-
             if (product == null || product.IsSystemProduct || !product.Published)
+            {
                 return NotFound();
+            }
 
             if (_captchaSettings.ShowOnAskQuestionPage && captchaError.HasValue())
             {
@@ -768,7 +812,10 @@ namespace Smartstore.Web.Controllers
                     TempData.Remove("AskQuestionAttributeSelection-" + product.Id);
 
                     NotifySuccess(T("Products.AskQuestion.Sent"));
-                    return RedirectToRoute("Product", new { SeName = await product.GetActiveSlugAsync() });
+
+                    return model.ProductUrl.HasValue()
+                        ? Redirect(model.ProductUrl)
+                        : RedirectToRoute("Product", new { SeName = await product.GetActiveSlugAsync() });
                 }
                 else
                 {
@@ -786,36 +833,34 @@ namespace Smartstore.Web.Controllers
         {
             var customer = Services.WorkContext.CurrentCustomer;
             var rawAttributes = TempData.Peek("AskQuestionAttributeSelection-" + product.Id) as string;
-
-            // Check if saved rawAttributes belongs to current product id
-            var formattedAttributes = string.Empty;
             var selection = new ProductVariantAttributeSelection(rawAttributes);
-            if (selection.AttributesMap.Any())
-            {
-                formattedAttributes = await _productAttributeFormatter.Value.FormatAttributesAsync(
-                    selection,
-                    product,
-                    ProductAttributeFormatOptions.PlainText,
-                    customer: null);
-            }
+            var slug = await product.GetActiveSlugAsync();
 
-            var seName = await product.GetActiveSlugAsync();
             var model = new ProductAskQuestionModel
             {
                 Id = product.Id,
                 ProductName = product.GetLocalized(x => x.Name),
-                ProductSeName = seName,
+                ProductSeName = slug,
                 SenderEmail = customer.Email,
                 SenderName = customer.GetFullName(),
                 SenderNameRequired = _privacySettings.FullNameOnProductRequestRequired,
                 SenderPhone = customer.GenericAttributes.Phone,
                 DisplayCaptcha = _captchaSettings.CanDisplayCaptcha && _captchaSettings.ShowOnAskQuestionPage,
-                SelectedAttributes = formattedAttributes,
-                ProductUrl = await _productUrlHelper.Value.GetAbsoluteProductUrlAsync(product.Id, seName, selection),
+                SelectedAttributes = string.Empty,
+                ProductUrl = await _productUrlHelper.Value.GetAbsoluteProductUrlAsync(product.Id, slug, selection),
                 IsQuoteRequest = product.CallForPrice
             };
 
             model.Question = T("Products.AskQuestion.Question." + (model.IsQuoteRequest ? "QuoteRequest" : "GeneralInquiry"), model.ProductName);
+
+            if (selection.HasAttributes)
+            {
+                model.SelectedAttributes = await _productAttributeFormatter.Value.FormatAttributesAsync(
+                    selection,
+                    product,
+                    ProductAttributeFormatOptions.PlainText,
+                    customer);
+            }
 
             return model;
         }

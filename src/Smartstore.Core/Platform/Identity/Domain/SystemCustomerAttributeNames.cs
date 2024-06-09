@@ -21,23 +21,28 @@
         public static string AvatarColor => "AvatarColor";
         public static string PasswordRecoveryToken => "PasswordRecoveryToken";
         public static string AccountActivationToken => "AccountActivationToken";
-        public static string LastVisitedPage => "LastVisitedPage";
         public static string ImpersonatedCustomerId => "ImpersonatedCustomerId";
         public static string AdminAreaStoreScopeConfiguration => "AdminAreaStoreScopeConfiguration";
         public static string MostRecentlyUsedCategories => "MostRecentlyUsedCategories";
         public static string MostRecentlyUsedManufacturers => "MostRecentlyUsedManufacturers";
         public static string HasConsentedToGdpr => "HasConsentedToGdpr";
-        public static string ClientIdent => "ClientIdent";
+
+        // Checkout
+        public static string DefaultBillingAddressId => "DefaultBillingAddressId";
+        public static string DefaultShippingAddressId => "DefaultShippingAddressId";
+        public static string PreferredShippingOption => "PreferredShippingOption";
+        public static string PreferrePaymentMethod => "PreferredPaymentMethod";
+
+        public static string UseRewardPointsDuringCheckout => "UseRewardPointsDuringCheckout";
+        public static string UseCreditBalanceDuringCheckout => "UseCreditBalanceDuringCheckout";
+        public static string SelectedShippingOption => "SelectedShippingOption";
+        public static string OfferedShippingOptions => "OfferedShippingOptions";
+        public static string SelectedPaymentMethod => "SelectedPaymentMethod";
 
         // Depends on store
         public static string CurrencyId => "CurrencyId";
         public static string LanguageId => "LanguageId";
-        public static string SelectedPaymentMethod => "SelectedPaymentMethod";
-        public static string SelectedShippingOption => "SelectedShippingOption";
-        public static string OfferedShippingOptions => "OfferedShippingOptions";
         public static string LastContinueShoppingPage => "LastContinueShoppingPage";
         public static string WorkingThemeName => "WorkingThemeName";
-        public static string UseRewardPointsDuringCheckout => "UseRewardPointsDuringCheckout";
-        public static string UseCreditBalanceDuringCheckout => "UseCreditBalanceDuringCheckout";
     }
 }

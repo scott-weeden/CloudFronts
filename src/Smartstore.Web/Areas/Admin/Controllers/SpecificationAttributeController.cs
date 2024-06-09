@@ -152,6 +152,11 @@ namespace Smartstore.Admin.Controllers
                 query = query.Where(x => x.ShowOnProductPage == model.SearchShowOnProductPage.Value);
             }
 
+            if (model.SearchEssential.HasValue)
+            {
+                query = query.Where(x => x.Essential == model.SearchEssential.Value);
+            }
+
             var attributes = await query
                 .OrderBy(x => x.DisplayOrder)
                 .ThenBy(x => x.Name)
@@ -159,13 +164,28 @@ namespace Smartstore.Admin.Controllers
                 .ToPagedList(command)
                 .LoadAsync();
 
+            var attributeIds = attributes.Select(x => x.Id).ToArray();
+            var numberOfOptions = await _db.SpecificationAttributes
+                .Where(x => attributeIds.Contains(x.Id))
+                .Select(x => new
+                {
+                    x.Id,
+                    NumberOfOptions = _db.SpecificationAttributeOptions.Count(y => y.SpecificationAttributeId == x.Id)
+                })
+                .ToDictionaryAsync(x => x.Id, x => x);
+
             var rows = await attributes
                 .SelectAwait(async x =>
                 {
                     var model = await mapper.MapAsync(x);
-                    model.EditUrl = Url.Action("Edit", "SpecificationAttribute", new { id = x.Id, area = "Admin" });
+                    model.EditUrl = Url.Action(nameof(Edit), "SpecificationAttribute", new { id = x.Id, area = "Admin" });
                     model.LocalizedFacetSorting = x.FacetSorting.GetLocalizedEnum(language.Id);
                     model.LocalizedFacetTemplateHint = x.FacetTemplateHint.GetLocalizedEnum(language.Id);
+
+                    if (numberOfOptions.TryGetValue(x.Id, out var info))
+                    {
+                        model.NumberOfOptions = info.NumberOfOptions;
+                    }
 
                     return model;
                 })
@@ -310,11 +330,22 @@ namespace Smartstore.Admin.Controllers
         #region Specification attribute options
 
         [Permission(Permissions.Catalog.Attribute.Read)]
-        public async Task<IActionResult> SpecificationAttributeOptionList(GridCommand command, int specificationAttributeId)
+        public async Task<IActionResult> SpecificationAttributeOptionList(GridCommand command, int specificationAttributeId, SpecificationAttributeModel model)
         {
             var mapper = MapperFactory.GetMapper<SpecificationAttributeOption, SpecificationAttributeOptionModel>();
-            var options = await _db.SpecificationAttributeOptions
-                .AsNoTracking()
+            var query = _db.SpecificationAttributeOptions.AsNoTracking();
+
+            if (model.SearchName.HasValue())
+            {
+                query = query.ApplySearchFilterFor(x => x.Name, model.SearchName);
+            }
+
+            if (model.SearchAlias.HasValue())
+            {
+                query = query.ApplySearchFilterFor(x => x.Alias, model.SearchAlias);
+            }
+
+            var options = await query
                 .Where(x => x.SpecificationAttributeId == specificationAttributeId)
                 .OrderBy(x => x.DisplayOrder)
                 .ThenBy(x => x.Id)
@@ -354,11 +385,16 @@ namespace Smartstore.Admin.Controllers
         }
 
         [Permission(Permissions.Catalog.Attribute.EditOption)]
-        public IActionResult SpecificationAttributeOptionCreatePopup(string btnId, string formId, int specificationAttributeId)
+        public async Task<IActionResult> SpecificationAttributeOptionCreatePopup(string btnId, string formId, int specificationAttributeId)
         {
+            var maxDisplayOrder = (await _db.SpecificationAttributeOptions
+                .Where(x => x.SpecificationAttributeId == specificationAttributeId)
+                .MaxAsync(x => (int?)x.DisplayOrder)) ?? 0;
+
             var model = new SpecificationAttributeOptionModel
             {
-                SpecificationAttributeId = specificationAttributeId
+                SpecificationAttributeId = specificationAttributeId,
+                DisplayOrder = ++maxDisplayOrder
             };
 
             AddLocales(model.Locales);
@@ -508,7 +544,7 @@ namespace Smartstore.Admin.Controllers
                     }
                 }
 
-                if (options.Any())
+                if (options.Count > 0)
                 {
                     _db.SpecificationAttributeOptions.AddRange(options.Select(x => x.Value));
                     await _db.SaveChangesAsync();

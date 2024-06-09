@@ -1,7 +1,5 @@
 ﻿using Smartstore.Core.Common.Configuration;
-using Smartstore.Core.Data;
 using Smartstore.Scheduling;
-using Smartstore.Utilities;
 
 namespace Smartstore.Core.Messaging.Tasks
 {
@@ -10,27 +8,19 @@ namespace Smartstore.Core.Messaging.Tasks
     /// </summary>
     public partial class QueuedMessagesClearTask : ITask
     {
-        private readonly SmartDbContext _db;
+        private readonly IQueuedEmailService _qeService;
         private readonly CommonSettings _commonSettings;
 
-        public QueuedMessagesClearTask(SmartDbContext db, CommonSettings commonSettings)
+        public QueuedMessagesClearTask(IQueuedEmailService qeService, CommonSettings commonSettings)
         {
-            _db = db;
+            _qeService = qeService;
             _commonSettings = commonSettings;
         }
 
-        public async Task Run(TaskExecutionContext ctx, CancellationToken cancelToken = default)
+        public Task Run(TaskExecutionContext ctx, CancellationToken cancelToken = default)
         {
             var olderThan = DateTime.UtcNow.AddDays(-Math.Abs(_commonSettings.MaxQueuedMessagesAgeInDays));
-
-            var numDeleted = await _db.QueuedEmails
-                .Where(x => x.CreatedOnUtc < olderThan && (x.SentOnUtc.HasValue || x.SentTries >= 3))
-                .ExecuteDeleteAsync(cancellationToken: cancelToken);
-
-            if (numDeleted > 100 && _db.DataProvider.CanShrink)
-            {
-                await CommonHelper.TryAction(() => _db.DataProvider.ShrinkDatabaseAsync(true, cancelToken));
-            }
+            return _qeService.DeleteAllQueuedMailsAsync(olderThan, cancelToken);
         }
     }
 }

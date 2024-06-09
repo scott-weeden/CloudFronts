@@ -139,6 +139,15 @@ namespace Smartstore.Core.Installation
                 DisplayOrder = 1
             };
 
+            //var manufacturerSamsung = new Manufacturer
+            //{
+            //    Name = "Samsung",
+            //    ManufacturerTemplateId = gridOrLinesTemplate.Id,
+            //    MediaFile = CreatePicture("brand/samsung.png"),
+            //    Published = true,
+            //    DisplayOrder = 1
+            //};
+
             var manufacturerMicrosoft = new Manufacturer
             {
                 Name = "Microsoft",
@@ -235,15 +244,6 @@ namespace Smartstore.Core.Installation
             //    MediaFile = CreatePicture("brand/hp.png"),
             //    Published = true,
             //    DisplayOrder = 5
-            //};
-
-            //var manufacturerSamsung = new Manufacturer
-            //{
-            //    Name = "Samsung",
-            //    ManufacturerTemplateId = manufacturerTemplateInGridAndLines.Id,
-            //    MediaFile = CreatePicture("brand/samsung.png"),
-            //    Published = true,
-            //    DisplayOrder = 7
             //};
 
             //var manufacturerAcer = new Manufacturer

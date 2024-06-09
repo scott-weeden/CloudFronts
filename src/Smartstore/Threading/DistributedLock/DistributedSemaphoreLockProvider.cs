@@ -2,9 +2,11 @@
 {
     internal class DistributedSemaphoreLockProvider : IDistributedLockProvider
     {
+        public static DistributedSemaphoreLockProvider Instance { get; } = new DistributedSemaphoreLockProvider();
+
         public IDistributedLock GetLock(string key)
         {
-            Guard.NotEmpty(key, nameof(key));
+            Guard.NotEmpty(key);
             return new DistributedSemaphoreLock(key);
         }
     }

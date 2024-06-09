@@ -114,6 +114,12 @@ namespace Smartstore.Core.Identity
         }
 
         /// <summary>
+        /// Gets or sets the client identification hash (IP + UserAgent).
+        /// </summary>
+        [StringLength(32)]
+        public string ClientIdent { get; set; }
+
+        /// <summary>
         /// Gets or sets a value indicating whether the customer was detected
         /// cookie-less by evaluating the ClientIdent (IP+UserAgent).
         /// </summary>
@@ -192,6 +198,12 @@ namespace Smartstore.Core.Identity
         /// Gets or sets the date and time of last activity
         /// </summary>
         public DateTime LastActivityDateUtc { get; set; }
+
+        /// <summary>
+        /// Gets or sets the URL of the last page visited.
+        /// </summary>
+        [StringLength(2048)]
+        public string LastVisitedPage { get; set; }
 
         /// <summary>
         /// For future use
@@ -343,7 +355,6 @@ namespace Smartstore.Core.Identity
         /// <summary>
         /// Gets or sets the wallet history.
         /// </summary>
-        [IgnoreDataMember]
         public ICollection<WalletHistory> WalletHistory
         {
             get => _walletHistory ?? LazyLoader.Load(this, ref _walletHistory) ?? (_walletHistory ??= new HashSet<WalletHistory>());

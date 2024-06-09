@@ -24,6 +24,10 @@ namespace Smartstore.StripeElements.Services
         private readonly IRoundingHelper _roundingHelper;
         private readonly IPaymentService _paymentService;
 
+        // INFO: Update API Version when updating Stripe.net dll
+        // Also test webhook endpoint because thats where errors are most likely to occur.
+        public static string ApiVersion => "2023-10-16";
+
         public StripeHelper(
             ICommonServices services,
             IShoppingCartService shoppingCartService,
@@ -112,14 +116,14 @@ namespace Smartstore.StripeElements.Services
                 // Create webhook
                 var createOptions = new WebhookEndpointCreateOptions
                 {
-                    ApiVersion = Module.ApiVersion,
+                    ApiVersion = ApiVersion,
                     Url = storeUrl + "stripe/webhookhandler",
-                    EnabledEvents = new List<string>
-                    {
+                    EnabledEvents =
+                    [
                         "payment_intent.succeeded",
                         "payment_intent.canceled",
                         "charge.refunded"
-                    }
+                    ]
                 };
 
                 var webhook = await service.CreateAsync(createOptions);

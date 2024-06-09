@@ -68,6 +68,11 @@ namespace Smartstore.Core.Catalog
         public bool ShowLinkedAttributeValueImage { get; set; } = true;
 
         /// <summary>
+        /// Gets or sets a value indicating whether to display product tags on the product detail page.
+        /// </summary>
+        public bool ShowProductTags { get; set; } = true;
+
+        /// <summary>
 		/// Gets or sets a value indicating how many menu items will be displayed
 		/// </summary>
         public int? MaxItemsToDisplayInCatalogMenu { get; set; }
@@ -314,6 +319,11 @@ namespace Smartstore.Core.Catalog
         /// </summary>
         public bool ShowManufacturerLogoInLists { get; set; } = true;
 
+        /// <summary>
+        /// Gets or sets a value indicating whether the manufacturer logo should be linked in product lists.
+        /// </summary>
+        public bool LinkManufacturerLogoInLists { get; set; } = true;
+
         public bool ShowShortDescriptionInGridStyleLists { get; set; } = true;
 
         public bool ShowProductOptionsInLists { get; set; } = true;
@@ -391,7 +401,7 @@ namespace Smartstore.Core.Catalog
         public int HtmlTextCollapsedHeight { get; set; } = 260;
 
         /// <summary>
-        /// Gets or sets an identifier for a delivery time dislayed when stock is empty
+        /// Gets or sets the identifier of a delivery time displayed when the stock is empty.
         /// </summary>
         public int? DeliveryTimeIdForEmptyStock { get; set; }
 
@@ -409,5 +419,31 @@ namespace Smartstore.Core.Catalog
         /// Gets or sets how many columns per row should be displayed at most in grid style lists on largest screen resolution.
         /// </summary>
         public GridColumnSpan GridStyleListColumnSpan { get; set; } = GridColumnSpan.Max4Cols;
+
+        #region Grouped product configuration
+
+        /// <summary>
+        /// Gets or sets the number of associated products per page.
+        /// The default value is 20.
+        /// </summary>
+        public int AssociatedProductsPageSize { get; set; } = 20;
+
+        /// <summary>
+        /// Gets or sets the minimum number of associated products from which a search box is displayed.
+        /// The default value is 10.
+        /// </summary>
+        public int SearchMinAssociatedProductsCount { get; set; } = 10;
+
+        /// <summary>
+        /// Gets or sets a value indicating whether associated products are collapsible.
+        /// </summary>
+        public bool CollapsibleAssociatedProducts { get; set; } = true;
+
+        /// <summary>
+        /// Gets or sets name of fields to display in a collapse header of associated products.
+        /// </summary>
+        public string[] CollapsibleAssociatedProductsHeaders { get; set; } = [AssociatedProductHeader.Image, AssociatedProductHeader.Sku, AssociatedProductHeader.Price];
+
+        #endregion
     }
 }

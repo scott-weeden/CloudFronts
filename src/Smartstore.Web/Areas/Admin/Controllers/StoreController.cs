@@ -10,6 +10,7 @@ using Smartstore.Core.Identity;
 using Smartstore.Core.Localization;
 using Smartstore.Core.Security;
 using Smartstore.Core.Stores;
+using Smartstore.Utilities;
 using Smartstore.Web.Models;
 using Smartstore.Web.Models.DataGrid;
 
@@ -19,11 +20,16 @@ namespace Smartstore.Admin.Controllers
     {
         private readonly SmartDbContext _db;
         private readonly ICatalogSearchService _catalogSearchService;
+        private readonly ShoppingCartSettings _shoppingCartSettings;
 
-        public StoreController(SmartDbContext db, ICatalogSearchService catalogSearchService)
+        public StoreController(
+            SmartDbContext db, 
+            ICatalogSearchService catalogSearchService,
+            ShoppingCartSettings shoppingCartSettings)
         {
             _db = db;
             _catalogSearchService = catalogSearchService;
+            _shoppingCartSettings = shoppingCartSettings;
         }
 
         /// <summary>
@@ -199,7 +205,7 @@ namespace Smartstore.Admin.Controllers
             return RedirectToAction(nameof(Edit), new { id = store.Id });
         }
 
-        [SaveChanges(typeof(SmartDbContext), false)]
+        [SaveChanges<SmartDbContext>(false)]
         [Permission(Permissions.Configuration.Store.ReadStats, false)]
         public async Task<JsonResult> StoreDashboardReportAsync()
         {
@@ -211,11 +217,12 @@ namespace Smartstore.Admin.Controllers
 
             var registeredCustomersQuery = _db.Customers
                 .AsNoTracking()
-                .ApplyRolesFilter(new[] { registeredRole.Id });
+                .ApplyRolesFilter([registeredRole.Id]);
 
             var sumAllOrders = await ordersQuery.SumAsync(x => (decimal?)x.OrderTotal) ?? 0;
-            var sumOpenCarts = await _db.ShoppingCartItems.GetOpenCartTypeSubTotalAsync(ShoppingCartType.ShoppingCart);
+            var sumOpenCarts = await _db.ShoppingCartItems.GetOpenCartTypeSubTotalAsync(ShoppingCartType.ShoppingCart, _shoppingCartSettings.AllowActivatableCartItems ? true : null);
             var sumWishlists = await _db.ShoppingCartItems.GetOpenCartTypeSubTotalAsync(ShoppingCartType.Wishlist);
+            var totalMediaSize = await _db.MediaFiles.SumAsync(x => (long)x.Size);
 
             var model = new StoreDashboardReportModel
             {
@@ -225,6 +232,7 @@ namespace Smartstore.Admin.Controllers
                 AttributesCount = (await _db.ProductAttributes.CountAsync()).ToString("N0"),
                 AttributeCombinationsCount = (await _db.ProductVariantAttributeCombinations.CountAsync(x => x.IsActive)).ToString("N0"),
                 MediaCount = (await Services.MediaService.CountFilesAsync(new MediaSearchQuery { Deleted = false })).ToString("N0"),
+                MediaSize = Prettifier.HumanizeBytes(totalMediaSize),
                 CustomersCount = (await registeredCustomersQuery.CountAsync()).ToString("N0"),
                 OrdersCount = (await ordersQuery.CountAsync()).ToString("N0"),
                 OnlineCustomersCount = (await _db.Customers.ApplyOnlineCustomersFilter(15).CountAsync()).ToString("N0"),

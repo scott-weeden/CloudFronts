@@ -18,7 +18,8 @@ namespace Smartstore.Core.Data.Migrations
         const string RemainingHoursColumn = nameof(Discount.ShowCountdownRemainingHours);
         const string BadgeLabelColumn = nameof(Discount.OfferBadgeLabel);
 
-        public bool RollbackOnFailure => false;
+        public DataSeederStage Stage => DataSeederStage.Early;
+        public bool AbortOnFailure => false;
 
         public override void Up()
         {

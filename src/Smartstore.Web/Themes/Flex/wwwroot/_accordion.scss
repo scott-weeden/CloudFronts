@@ -81,23 +81,17 @@
     .card:first-child,
     .card:first-child .card-header,
     .card:first-child .card-title-link {
-        @include border-left-radius(var(--border-radius-md));
+        @include border-top-radius($card-border-radius);
     }
 
     .card:last-child,
     .card:last-child .card-header { 
-        @include border-bottom-radius(var(--border-radius-md));
+        @include border-bottom-radius($card-border-radius);
     }
 
     .card:last-child .card-header { 
         border-bottom-width: 0;
     }
-    
-    .card:first-of-type {
-        border-bottom: $card-border-width solid $card-border-color;
 
-        :not(:last-of-type) {
-            border-bottom: 0 !important;
-        }
-    }
+    // TODO: (mc) (mh) Probably bad decision to remove .card:first-of-type. Investigate and fix (?)
 }

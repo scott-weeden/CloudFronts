@@ -1,5 +1,6 @@
 ﻿#nullable enable
 
+using System.ComponentModel;
 using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
 using System.Globalization;
@@ -16,12 +17,15 @@ namespace Smartstore
 {
     public static partial class StringExtensions
     {
+        private readonly static TypeConverter _int32Converter = TypeDescriptor.GetConverter(typeof(int));
+        private readonly static TypeConverter _singleConverter = TypeDescriptor.GetConverter(typeof(float));
+
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static int ToInt(this string? value, int defaultValue = 0)
         {
-            if (ConvertUtility.TryConvert(value, typeof(int), CultureInfo.InvariantCulture, out object? result))
+            if (!string.IsNullOrEmpty(value))
             {
-                return (int)result!;
+                return CommonHelper.TryAction(() => (int)_int32Converter.ConvertFromInvariantString(value)!);
             }
 
             return defaultValue;
@@ -30,7 +34,7 @@ namespace Smartstore
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static char ToChar(this string? value, bool unescape = false, char defaultValue = '\0')
         {
-            if (value.HasValue() && char.TryParse(unescape ? Regex.Unescape(value!) : value, out char result))
+            if (!string.IsNullOrEmpty(value) && char.TryParse(unescape ? Regex.Unescape(value!) : value, out char result))
             {
                 return result;
             }
@@ -41,9 +45,9 @@ namespace Smartstore
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static float ToFloat(this string? value, float defaultValue = 0)
         {
-            if (ConvertUtility.TryConvert(value, typeof(float), CultureInfo.InvariantCulture, out object? result))
+            if (!string.IsNullOrEmpty(value))
             {
-                return (float)result!;
+                return CommonHelper.TryAction(() => (float)_singleConverter.ConvertFromInvariantString(value)!);
             }
 
             return defaultValue;
@@ -113,6 +117,7 @@ namespace Smartstore
         /// <summary>
         /// Parse ISO-8601 UTC timestamp including milliseconds.
         /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static DateTime? ToDateTimeIso8601(this string? value)
         {
             return ToDateTimeIso8601(value.AsSpan());
@@ -159,12 +164,14 @@ namespace Smartstore
         /// <param name="encoding">The encoder to use. Default: <see cref="Encoding.UTF8"/></param>
         /// <returns>A byte array containing the results of encoding the specified set of characters.</returns>
         [DebuggerStepThrough]
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static byte[] GetBytes(this string value, Encoding? encoding = null)
         {
             return (encoding ?? Encoding.UTF8).GetBytes(value);
         }
 
         [DebuggerStepThrough]
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static T ToEnum<T>(this string? value, T defaultValue)
             where T : struct
         {
@@ -172,6 +179,7 @@ namespace Smartstore
         }
 
         [DebuggerStepThrough]
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static T ToEnum<T>(this ReadOnlySpan<char> value, T defaultValue)
             where T : struct
         {
@@ -179,24 +187,63 @@ namespace Smartstore
         }
 
         /// <summary>
-        /// Computes the xxHash of the input string. xxHash is an extremely fast non-cryptographic Hash algorithm.
+        /// Computes the 32-bit XxHash32 of the input string.
         /// </summary>
         /// <param name="value">The input string</param>
-        /// <returns>xxHash</returns>
+        /// <param name="seed">The seed value for this hash computation.</param>
+        /// <returns>The XxHash32 hash of the input string in HEX.</returns>
         [DebuggerStepThrough]
         [return: NotNullIfNotNull(nameof(value))]
-        public static string? XxHash(this string? value)
+        public static string? XxHash32(this string? value, int seed = 0)
         {
-            if (value.IsEmpty())
+            if (string.IsNullOrWhiteSpace(value))
             {
                 return value;
             }
 
-            return $"{XxHashUnsafe.ComputeHash(value):X}";
+            var hashCode = System.IO.Hashing.XxHash32.HashToUInt32(Encoding.UTF8.GetBytes(value), seed);
+            return $"{hashCode:X}";
         }
 
         /// <summary>
+        /// Computes the 64-bit XxHash3 of the input string.
         /// </summary>
+        /// <param name="value">The input string</param>
+        /// <param name="seed">The seed value for this hash computation.</param>
+        /// <returns>The XxHash3 hash of the input string in HEX.</returns>
+        [DebuggerStepThrough]
+        [return: NotNullIfNotNull(nameof(value))]
+        public static string? XxHash3(this string? value, long seed = 0)
+        {
+            if (string.IsNullOrWhiteSpace(value))
+            {
+                return value;
+            }
+
+            var hashCode = System.IO.Hashing.XxHash3.HashToUInt64(Encoding.UTF8.GetBytes(value), seed);
+            return $"{hashCode:X}";
+        }
+
+        /// <summary>
+        /// Computes the 64-bit XxHash64 of the input string.
+        /// </summary>
+        /// <param name="value">The input string</param>
+        /// <param name="seed">The seed value for this hash computation.</param>
+        /// <returns>The XxHash64 hash of the input string in HEX.</returns>
+        [DebuggerStepThrough]
+        [return: NotNullIfNotNull(nameof(value))]
+        public static string? XxHash64(this string? value, long seed = 0)
+        {
+            if (string.IsNullOrWhiteSpace(value))
+            {
+                return value;
+            }
+
+            var hashCode = System.IO.Hashing.XxHash64.HashToUInt64(Encoding.UTF8.GetBytes(value), seed);
+            return $"{hashCode:X}";
+        }
+
+
         [DebuggerStepThrough]
         [Obsolete("Microsoft recommends SHA256 or SHA512 class instead of MD5. Use MD5 only for compatibility with legacy applications and data.")]
         [return: NotNullIfNotNull(nameof(value))]

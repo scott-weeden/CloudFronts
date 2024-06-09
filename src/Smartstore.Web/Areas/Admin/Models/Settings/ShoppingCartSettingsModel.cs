@@ -20,6 +20,9 @@ namespace Smartstore.Admin.Models
         [LocalizedDisplay("*MaximumWishlistItems")]
         public int MaximumWishlistItems { get; set; }
 
+        [LocalizedDisplay("*AllowActivatableCartItems")]
+        public bool AllowActivatableCartItems { get; set; }
+
         [LocalizedDisplay("*AllowOutOfStockItemsToBeAddedToWishlist")]
         public bool AllowOutOfStockItemsToBeAddedToWishlist { get; set; }
 
@@ -56,6 +59,9 @@ namespace Smartstore.Admin.Models
         [LocalizedDisplay("*ShowProductImagesInMiniShoppingCart")]
         public bool ShowProductImagesInMiniShoppingCart { get; set; }
 
+        [LocalizedDisplay("*ShowEssentialAttributesInMiniShoppingCart")]
+        public bool ShowEssentialAttributesInMiniShoppingCart { get; set; }
+
         [LocalizedDisplay("*ShowConfirmOrderLegalHint")]
         public bool ShowConfirmOrderLegalHint { get; set; }
 
@@ -76,6 +82,21 @@ namespace Smartstore.Admin.Models
 
         [LocalizedDisplay("*MaxQuantityInputDropdownItems")]
         public int MaxQuantityInputDropdownItems { get; set; }
+
+        [LocalizedDisplay("*CheckoutProcess")]
+        public string CheckoutProcess { get; set; }
+
+        [LocalizedDisplay("*QuickCheckoutEnabled")]
+        public bool QuickCheckoutEnabled { get; set; }
+
+        [LocalizedDisplay("*CustomersCanChangePreferredShipping")]
+        public bool CustomersCanChangePreferredShipping { get; set; }
+
+        [LocalizedDisplay("*CustomersCanChangePreferredPayment")]
+        public bool CustomersCanChangePreferredPayment { get; set; }
+
+        [LocalizedDisplay("*ShowSecondBuyButtonBelowCart")]
+        public bool ShowSecondBuyButtonBelowCart { get; set; }
 
         [LocalizedDisplay("*ShowCommentBox")]
         public bool ShowCommentBox { get; set; }

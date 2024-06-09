@@ -27,6 +27,7 @@ namespace Smartstore.Admin.Models.Topics
         }
 
         [UIHint("Stores")]
+        [AdditionalMetadata("multiple", true)]
         [LocalizedDisplay("Admin.Common.Store.LimitedTo")]
         public int[] SelectedStoreIds { get; set; }
 
@@ -171,7 +172,7 @@ namespace Smartstore.Admin.Models.Topics
             RuleFor(x => x.SystemName).NotEmpty();
             RuleFor(x => x.HtmlId)
                 .Must(u => u.IsEmpty() || !u.Any(x => char.IsWhiteSpace(x)))
-                .WithMessage(T("Admin.ContentManagement.Topics.Validation.NoWhiteSpace"));
+                .WithMessage(T("Admin.Common.HtmlId.NoWhiteSpace"));
 
             RuleFor(x => x.IsPasswordProtected)
                 .Equal(false)

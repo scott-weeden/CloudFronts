@@ -18,6 +18,7 @@ namespace Smartstore.Web.Api.Controllers
     /// <summary>
     /// The endpoint for operations on Order entity.
     /// </summary>
+    [WebApiGroup(WebApiGroupNames.Checkout)]
     public class OrdersController : WebApiController<Order>
     {
         private readonly Lazy<IOrderProcessingService> _orderProcessingService;
@@ -73,6 +74,17 @@ namespace Smartstore.Web.Api.Controllers
         public SingleResult<Address> GetShippingAddress(int key)
         {
             return GetRelatedEntity(key, x => x.ShippingAddress);
+        }
+
+        /// <summary>
+        /// Gets WalletHistory entities assigned to an Order.
+        /// </summary>
+        /// <remarks>Only applicable if a wallet plugin is installed.</remarks>
+        [HttpGet("Orders({key})/WalletHistory"), ApiQueryable]
+        [Permission("Wallet.read")]
+        public IQueryable<WalletHistory> GetWalletHistory(int key)
+        {
+            return GetRelatedQuery(key, x => x.WalletHistory);
         }
 
         [HttpGet("Orders({key})/DiscountUsageHistory"), ApiQueryable]

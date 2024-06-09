@@ -17,7 +17,7 @@ namespace Smartstore.Core.Content.Media.Storage
 
         private readonly IMediaFileSystem _fileSystem;
         private readonly AsyncRunner _asyncRunner;
-        private readonly IDictionary<int, string> _pathCache = new Dictionary<int, string>();
+        private readonly Dictionary<int, string> _pathCache = [];
 
         public FileSystemMediaStorageProvider(IMediaFileSystem fileSystem, AsyncRunner asyncRunner)
         {
@@ -29,9 +29,9 @@ namespace Smartstore.Core.Content.Media.Storage
 
         public static string SystemName => "MediaStorage.SmartStoreFileSystem";
 
-        protected string GetPath(MediaFile mediaFile)
+        protected internal string GetPath(MediaFile mediaFile)
         {
-            Guard.NotNull(mediaFile, nameof(mediaFile));
+            Guard.NotNull(mediaFile);
 
             if (_pathCache.TryGetValue(mediaFile.Id, out var path))
             {
@@ -57,7 +57,7 @@ namespace Smartstore.Core.Content.Media.Storage
 
         public virtual async Task<long> GetLengthAsync(MediaFile mediaFile)
         {
-            Guard.NotNull(mediaFile, nameof(mediaFile));
+            Guard.NotNull(mediaFile);
 
             if (mediaFile.Size > 0)
             {
@@ -76,7 +76,7 @@ namespace Smartstore.Core.Content.Media.Storage
 
         public virtual Stream? OpenRead(MediaFile mediaFile)
         {
-            var file = _fileSystem.GetFile(GetPath(Guard.NotNull(mediaFile, nameof(mediaFile))));
+            var file = _fileSystem.GetFile(GetPath(Guard.NotNull(mediaFile)));
             return file.Exists ? file.OpenRead() : null;
         }
 
@@ -88,14 +88,13 @@ namespace Smartstore.Core.Content.Media.Storage
 
         public virtual async Task<byte[]?> LoadAsync(MediaFile mediaFile)
         {
-            Guard.NotNull(mediaFile, nameof(mediaFile));
-
+            Guard.NotNull(mediaFile);
             return (await _fileSystem.ReadAllBytesAsync(GetPath(mediaFile))) ?? null;
         }
 
         public virtual async Task SaveAsync(MediaFile mediaFile, MediaStorageItem? item)
         {
-            Guard.NotNull(mediaFile, nameof(mediaFile));
+            Guard.NotNull(mediaFile);
 
             // TODO: (?) if the new file extension differs from the old one then the old file never gets deleted
 
@@ -212,7 +211,7 @@ namespace Smartstore.Core.Content.Media.Storage
 
         private Task OnCompletedInternal(MediaMoverContext context, bool succeeded, CancellationToken cancelToken)
         {
-            if (context.AffectedFiles.Any())
+            if (context.AffectedFiles.Count != 0)
             {
                 var hasReceived = context.Target == this;
 

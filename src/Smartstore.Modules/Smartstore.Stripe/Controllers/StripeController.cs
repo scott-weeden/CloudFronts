@@ -9,6 +9,7 @@ using Smartstore.Core.Catalog.Products;
 using Smartstore.Core.Checkout.Cart;
 using Smartstore.Core.Checkout.Orders;
 using Smartstore.Core.Checkout.Payment;
+using Smartstore.Core.Checkout.Shipping;
 using Smartstore.Core.Checkout.Tax;
 using Smartstore.Core.Common.Services;
 using Smartstore.Core.Data;
@@ -161,16 +162,34 @@ namespace Smartstore.StripeElements.Controllers
         }
 
         [HttpPost]
-        public async Task<IActionResult> GetUpdatePaymentRequest()
+        public async Task<IActionResult> GetUpdatePaymentRequest(ProductVariantQuery query, bool? useRewardPoints)
         {
-            var stripePaymentRequest = await _stripeHelper.GetStripePaymentRequestAsync();
+            var success = false;
+            var message = string.Empty;
+            var store = Services.StoreContext.CurrentStore;
+            var customer = Services.WorkContext.CurrentCustomer;
+            var warnings = new List<string>();
+            var cart = await _shoppingCartService.GetCartAsync(customer, ShoppingCartType.ShoppingCart, store.Id);
 
-            stripePaymentRequest.RequestPayerName = false;
-            stripePaymentRequest.RequestPayerEmail = false;
+            var isCartValid = await _shoppingCartService.SaveCartDataAsync(cart, warnings, query, useRewardPoints, false);
+            if (isCartValid)
+            {
 
-            var paymentRequest = JsonConvert.SerializeObject(stripePaymentRequest);
+                var stripePaymentRequest = await _stripeHelper.GetStripePaymentRequestAsync();
 
-            return Json(new { success = true, paymentRequest });
+                stripePaymentRequest.RequestPayerName = false;
+                stripePaymentRequest.RequestPayerEmail = false;
+
+                var paymentRequest = JsonConvert.SerializeObject(stripePaymentRequest);
+
+                return Json(new { success = true, paymentRequest });
+            }
+            else
+            {
+                message = string.Join(Environment.NewLine, warnings);
+            }
+
+            return Json(new { success, message });
         }
 
         /// <summary>
@@ -195,6 +214,7 @@ namespace Smartstore.StripeElements.Controllers
                     paymentRequest = new ProcessPaymentRequest();
                 }
 
+
                 paymentRequest.StoreId = store.Id;
                 paymentRequest.CustomerId = customer.Id;
                 paymentRequest.PaymentMethodSystemName = StripeElementsProvider.SystemName;
@@ -209,23 +229,53 @@ namespace Smartstore.StripeElements.Controllers
                         var cartTotal = await _orderCalculationService.GetShoppingCartTotalAsync(cart, true);
                         var convertedTotal = cartTotal.ConvertedAmount.Total.Value;
 
-                        // Update Stripe Payment Intent.
-                        var intentUpdateOptions = new PaymentIntentUpdateOptions
-                        {
-                            Amount = _roundingHelper.ToSmallestCurrencyUnit(convertedTotal),
-                            Currency = state.PaymentIntent.Currency,
-                            PaymentMethod = state.PaymentMethod
-                        };
+                        var paymentIntentService = new PaymentIntentService();
+                        PaymentIntent paymentIntent = null;
 
-                        var service = new PaymentIntentService();
-                        var paymentIntent = await service.UpdateAsync(state.PaymentIntent.Id, intentUpdateOptions);
+                        var shippingOption = customer.GenericAttributes.Get<ShippingOption>(SystemCustomerAttributeNames.SelectedShippingOption, store.Id);
+                        var shipping = await GetShippingAddressAsync(customer, shippingOption.Name);
+
+                        if (state.PaymentIntent == null)
+                        {
+                            paymentIntent = paymentIntentService.Create(new PaymentIntentCreateOptions
+                            {
+                                Amount = _roundingHelper.ToSmallestCurrencyUnit(convertedTotal),
+                                Currency = Services.WorkContext.WorkingCurrency.CurrencyCode.ToLower(),
+                                CaptureMethod = _settings.CaptureMethod,
+                                AutomaticPaymentMethods = new PaymentIntentAutomaticPaymentMethodsOptions
+                                {
+                                    Enabled = true,
+                                },
+                                Metadata = new Dictionary<string, string>
+                                {
+                                    ["CustomerId"] = customer.Id.ToString()
+                                },
+                                PaymentMethod = state.PaymentMethod,
+                                Shipping = shipping
+                            });
+
+                            state.PaymentIntent = paymentIntent;
+                        }
+                        else
+                        {
+                            // Update Stripe Payment Intent.
+                            var intentUpdateOptions = new PaymentIntentUpdateOptions
+                            {
+                                Amount = _roundingHelper.ToSmallestCurrencyUnit(convertedTotal),
+                                Currency = state.PaymentIntent.Currency,
+                                PaymentMethod = state.PaymentMethod,
+                                Shipping = shipping
+                            };
+
+                            paymentIntent = await paymentIntentService.UpdateAsync(state.PaymentIntent.Id, intentUpdateOptions);
+                        }
 
                         var confirmOptions = new PaymentIntentConfirmOptions
                         {
                             ReturnUrl = store.GetAbsoluteUrl(Url.Action("RedirectionResult", "Stripe").TrimStart('/'))
                         };
 
-                        paymentIntent = await service.ConfirmAsync(paymentIntent.Id, confirmOptions);
+                        paymentIntent = await paymentIntentService.ConfirmAsync(paymentIntent.Id, confirmOptions);
 
                         if (paymentIntent.NextAction?.RedirectToUrl?.Url?.HasValue() == true)
                         {
@@ -253,6 +303,26 @@ namespace Smartstore.StripeElements.Controllers
             }
 
             return Json(new { success, redirectUrl, messages });
+        }
+
+        private async Task<ChargeShippingOptions> GetShippingAddressAsync(Core.Identity.Customer customer, string carrier)
+        {
+            var address = customer.ShippingAddress ?? customer.BillingAddress;
+            var country = await _db.Countries.FindAsync(address.CountryId);
+
+            return new ChargeShippingOptions
+            {
+                Carrier = carrier,
+                Name = $"{address.FirstName} {address.LastName}",
+                Address = new AddressOptions
+                {
+                    City = address.City,
+                    Country = country.TwoLetterIsoCode,
+                    Line1 = address.Address1,
+                    Line2 = address.Address2,
+                    PostalCode = address.ZipPostalCode
+                }
+            };
         }
 
         public IActionResult RedirectionResult(string redirect_status)
@@ -323,93 +393,31 @@ namespace Smartstore.StripeElements.Controllers
                 {
                     // Payment intent was captured in Stripe backend
                     var paymentIntent = stripeEvent.Data.Object as PaymentIntent;
-
-                    // Get and process order.
-                    var order = await _db.Orders.FirstOrDefaultAsync(x =>
-                        x.PaymentMethodSystemName == StripeElementsProvider.SystemName && 
-                        x.AuthorizationTransactionId == paymentIntent.Id);
+                    var order = await GetStripeOrderAsync(paymentIntent.Id);
 
                     if (order != null)
                     {
                         // INFO: This can also be a partial capture.
-                        var capturedAmount = paymentIntent.Amount;
-
-                        // Convert ammount.
-                        decimal convertedAmount = capturedAmount / 100M;
+                        decimal convertedAmount = paymentIntent.Amount / 100M;
 
                         // Check if full order amount was captured.
-                        if (order.OrderTotal == convertedAmount)
-                        {
-                            // Full capture.
-                            order.PaymentStatus = PaymentStatus.Paid;
-                        }
-                        else
-                        {
-                            // Partial capture.
-                            order.PaymentStatus = PaymentStatus.Pending;
-                        }
+                        order.PaymentStatus = order.OrderTotal == convertedAmount ? PaymentStatus.Paid : PaymentStatus.Pending;
 
                         await _db.SaveChangesAsync();
-                    }
-                    else
-                    {
-                        Logger.Warn(T("Plugins.Smartstore.Stripe.OrderNotFound", paymentIntent.Id));
-                        return Ok();
-                    }
-                }
-                else if (stripeEvent.Type == Stripe.Events.PaymentIntentCanceled)
-                {
-                    var paymentIntent = stripeEvent.Data.Object as PaymentIntent;
-
-                    // Get and process order.
-                    var order = await _db.Orders.FirstOrDefaultAsync(x =>
-                        x.PaymentMethodSystemName == StripeElementsProvider.SystemName && 
-                        x.AuthorizationTransactionId == paymentIntent.Id);
-
-                    if (order != null)
-                    {
-                        order.PaymentStatus = PaymentStatus.Voided;
-
-                        // Write some infos into order notes.
-                        WriteOrderNotes(order, paymentIntent.LatestCharge);
-
-                        await _db.SaveChangesAsync();
-                    }
-                    else
-                    {
-                        Logger.Warn(T("Plugins.Smartstore.Stripe.OrderNotFound", paymentIntent.Id));
-                        return Ok();
                     }
                 }
                 else if (stripeEvent.Type == Stripe.Events.ChargeRefunded)
                 {
-                    // TODO: (mh) (core) This else part and the above "PaymentIntentSucceeded" if part are nearly identical. Combine (TBD with MC).
                     var charge = stripeEvent.Data.Object as Charge;
-
-                    // Get and process order.
-                    var order = await _db.Orders.FirstOrDefaultAsync(x =>
-                        x.PaymentMethodSystemName == StripeElementsProvider.SystemName && 
-                        x.AuthorizationTransactionId == charge.PaymentIntentId);
+                    var order = await GetStripeOrderAsync(charge.PaymentIntentId);
 
                     if (order != null)
                     {
                         // INFO: This can also be a partial refund.
-                        var capturedAmount = charge.Amount;
-
-                        // Convert ammount.
-                        decimal convertedAmount = capturedAmount / 100M;
+                        decimal convertedAmount = charge.Amount / 100M;
 
                         // Check if full order amount was refund.
-                        if (order.OrderTotal == convertedAmount)
-                        {
-                            // Full refund.
-                            order.PaymentStatus = PaymentStatus.Refunded;
-                        }
-                        else
-                        {
-                            // Partial refund.
-                            order.PaymentStatus = PaymentStatus.PartiallyRefunded;
-                        }
+                        order.PaymentStatus = order.OrderTotal == convertedAmount ? PaymentStatus.Refunded : PaymentStatus.PartiallyRefunded;
 
                         // Handle refunded amount.
                         order.RefundedAmount = convertedAmount;
@@ -419,10 +427,20 @@ namespace Smartstore.StripeElements.Controllers
                         
                         await _db.SaveChangesAsync();
                     }
-                    else
+                }
+                else if (stripeEvent.Type == Stripe.Events.PaymentIntentCanceled)
+                {
+                    var paymentIntent = stripeEvent.Data.Object as PaymentIntent;
+                    var order = await GetStripeOrderAsync(paymentIntent.Id);
+
+                    if (order != null)
                     {
-                        Logger.Warn(T("Plugins.Smartstore.Stripe.OrderNotFound", charge.PaymentIntentId));
-                        return Ok();
+                        order.PaymentStatus = PaymentStatus.Voided;
+
+                        // Write some infos into order notes.
+                        WriteOrderNotes(order, paymentIntent.LatestCharge);
+
+                        await _db.SaveChangesAsync();
                     }
                 }
                 else
@@ -442,6 +460,21 @@ namespace Smartstore.StripeElements.Controllers
                 Logger.Error(ex);
                 return StatusCode(500);
             }
+        }
+
+        private async Task<Order> GetStripeOrderAsync(string paymentIntentId)
+        {
+            var order = await _db.Orders.FirstOrDefaultAsync(x =>
+                        x.PaymentMethodSystemName == StripeElementsProvider.SystemName &&
+                        x.AuthorizationTransactionId == paymentIntentId);
+
+            if (order == null)
+            {
+                Logger.Warn(T("Plugins.Smartstore.Stripe.OrderNotFound", paymentIntentId));
+                return null;
+            }
+
+            return order;
         }
 
         // INFO: We leave this method in case we want to log further infos in future.

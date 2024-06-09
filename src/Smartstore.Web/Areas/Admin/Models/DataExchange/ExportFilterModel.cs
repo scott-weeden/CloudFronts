@@ -13,9 +13,11 @@ namespace Smartstore.Admin.Models.Export
         public int? StoreId { get; set; }
 
         [LocalizedDisplay("*CreatedFrom")]
+        [AdditionalMetadata("pickTime", true)]
         public DateTime? CreatedFrom { get; set; }
 
         [LocalizedDisplay("*CreatedTo")]
+        [AdditionalMetadata("pickTime", true)]
         public DateTime? CreatedTo { get; set; }
 
         [UIHint("CustomerRoles")]
@@ -37,9 +39,11 @@ namespace Smartstore.Admin.Models.Export
         public ProductVisibility? Visibility { get; set; }
 
         [LocalizedDisplay("*IdMinimum")]
+        [AdditionalMetadata("invariant", true)]
         public int? IdMinimum { get; set; }
 
         [LocalizedDisplay("*IdMaximum")]
+        [AdditionalMetadata("invariant", true)]
         public int? IdMaximum { get; set; }
 
         [LocalizedDisplay("*PriceMinimum")]
@@ -95,9 +99,11 @@ namespace Smartstore.Admin.Models.Export
         public int[] ShippingCountryIds { get; set; }
 
         [LocalizedDisplay("*LastActivityFrom")]
+        [AdditionalMetadata("pickTime", true)]
         public DateTime? LastActivityFrom { get; set; }
 
         [LocalizedDisplay("*LastActivityTo")]
+        [AdditionalMetadata("pickTime", true)]
         public DateTime? LastActivityTo { get; set; }
 
         [LocalizedDisplay("*HasSpentAtLeastAmount")]

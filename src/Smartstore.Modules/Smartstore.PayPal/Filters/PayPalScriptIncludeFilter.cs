@@ -50,7 +50,6 @@ namespace Smartstore.PayPal.Filters
             _client = client;
             _cookieConsentManager = cookieConsentManager;
             _pageAssetBuilder = pageAssetBuilder;
-            
         }
 
         public ILogger Logger { get; set; } = NullLogger.Instance;
@@ -66,7 +65,7 @@ namespace Smartstore.PayPal.Filters
             if (isJsSDKMethodEnabled)
             {
                 // INFO: Lets load the utility js regardsless of user consent. It doesn't set any cookies.
-                _pageAssetBuilder.AppendScriptFiles($"/Modules/Smartstore.PayPal/js/paypal.utils.js?v={SmartstoreVersion.CurrentFullVersion}.1");
+                _pageAssetBuilder.AppendScriptFiles($"~/Modules/Smartstore.PayPal/js/paypal.utils.js?v={SmartstoreVersion.CurrentFullVersion}.1");
             }
 
             // TODO: (mh) Find a better (or safer) way to render this script.

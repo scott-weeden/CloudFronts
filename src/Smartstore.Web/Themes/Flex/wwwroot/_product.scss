@@ -601,3 +601,82 @@ $pd-offer-spacing:              $grid-gutter-width / 2;
         outline: 1px solid rgba(#000, 0.15);
     }
 }
+
+// Associated products
+// =====================================================
+
+.pd-assoc-list {
+    display: flex;
+    flex-flow: column;
+    row-gap: 0.375rem;
+}
+
+.pd-assoc-header {
+    background-color: rgba($black, 0.05);
+    border-radius: var(--border-radius-md);
+    transition: background-color 0.1s ease;
+
+    &:hover {
+        background-color: rgba($black, 0.1);
+    }
+
+    &.collapsed .collapse-chevron {
+        transform: rotate(-180deg);
+    }
+}
+
+.pd-assoc-title {
+    padding: 0.75rem;
+
+    > .col:not(:last-child) {
+        display: flex;
+        padding: 0.3rem 0.5rem;
+        align-items: center;
+    }
+
+    .pd-qty-input-container {
+        width: inherit;
+        cursor: default;
+    }
+
+/*    .numberinput:not(:hover, :active, :focus), 
+    .btn-secondary:not(:hover, :active, :focus) {
+        border-color: transparent;
+        box-shadow: none;
+    }*/
+
+    .collapse-chevron {
+        height: max-content;
+    }
+}
+
+.pd-assoc-actions {
+    display: flex;
+    justify-content: flex-end;
+    margin-inline-start: auto;
+    max-width: 170px;
+    width: 100%;
+    min-width: 100px;
+    padding: 0;
+}
+
+.pd-assoc-name {
+    font-weight: $font-weight-medium;
+}
+
+.pd-assoc-img {
+    width: 50px;
+    min-width: 50px;
+    max-width: 50px;
+    align-self: center;
+}
+
+.pd-assoc-attr {
+    @extend .text-truncate;
+    width: 100%;
+}
+
+.pd-assoc-price {
+    font-weight: $font-weight-medium;
+    color: $pd-price-color;
+}

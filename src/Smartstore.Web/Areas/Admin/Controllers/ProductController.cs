@@ -1,6 +1,4 @@
-﻿using System.Linq.Dynamic.Core;
-using System.Net;
-using AngleSharp.Common;
+﻿using System.Net;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc.Rendering;
 using Microsoft.AspNetCore.Routing;
@@ -62,6 +60,7 @@ namespace Smartstore.Admin.Controllers
         private readonly Lazy<IDownloadService> _downloadService;
         private readonly Lazy<ICatalogSearchService> _catalogSearchService;
         private readonly Lazy<ProductUrlHelper> _productUrlHelper;
+        private readonly Lazy<IRuleProviderFactory> _ruleProviderFactory;
         private readonly AdminAreaSettings _adminAreaSettings;
         private readonly CatalogSettings _catalogSettings;
         private readonly MeasureSettings _measureSettings;
@@ -96,6 +95,7 @@ namespace Smartstore.Admin.Controllers
             Lazy<IDownloadService> downloadService,
             Lazy<ICatalogSearchService> catalogSearchService,
             Lazy<ProductUrlHelper> productUrlHelper,
+            Lazy<IRuleProviderFactory> ruleProviderFactory,
             AdminAreaSettings adminAreaSettings,
             CatalogSettings catalogSettings,
             MeasureSettings measureSettings,
@@ -129,6 +129,7 @@ namespace Smartstore.Admin.Controllers
             _downloadService = downloadService;
             _catalogSearchService = catalogSearchService;
             _productUrlHelper = productUrlHelper;
+            _ruleProviderFactory = ruleProviderFactory;
             _adminAreaSettings = adminAreaSettings;
             _catalogSettings = catalogSettings;
             _measureSettings = measureSettings;
@@ -214,7 +215,7 @@ namespace Smartstore.Admin.Controllers
                 product.AllowCustomerReviews = true;
                 product.Published = true;
                 product.MaximumCustomerEnteredPrice = 1000;
-                
+
                 if (product.ProductType == ProductType.BundledProduct)
                 {
                     product.BundleTitleText = T("Products.Bundle.BundleIncludes");
@@ -337,25 +338,28 @@ namespace Smartstore.Admin.Controllers
         /// <param name="page">Zero based page index.</param>
         /// <param name="term">Optional search term.</param>
         /// <param name="selectedIds">Selected product identifiers.</param>
-        public async Task<IActionResult> AllProducts(int page, string term, string selectedIds)
+        public async Task<IActionResult> AllProducts(int page, string term, string selectedIds, string disabledIds)
         {
             const int pageSize = 100;
-            IEnumerable<Product> products = new List<Product>();
-            var hasMoreData = true;
-            var ids = selectedIds.ToIntArray();
 
-            // Perform a search for SKU, MPN or GTIN first.
+            var hasMoreData = false;
+            var idsSelected = selectedIds.ToIntArray();
+            var idsDisabled = disabledIds.ToIntArray();
+            IList<Product> products = null;
+
             if (term.HasValue())
             {
-                products = await _db.Products
-                    .IgnoreQueryFilters()
-                    .ApplyProductCodeFilter(term)
-                    .ToListAsync();
+                // Perform a search by SKU, MPN or GTIN first.
+                var (product, _) = await _productService.GetProductByCodeAsync(term, true);
+                if (product != null)
+                {
+                    products = new List<Product> { product };
+                }
             }
-            
-            // If no products were found by unique identifiers, perform a full text search.
-            if (!products.Any())
+
+            if (products.IsNullOrEmpty())
             {
+                // If no products were found by unique identifiers, perform a full text search.
                 var skip = page * pageSize;
                 var fields = new List<string> { "name" };
 
@@ -385,8 +389,9 @@ namespace Smartstore.Admin.Controllers
                 else
                 {
                     var query = _catalogSearchService.Value.PrepareQuery(searchQuery);
+                    var count = await query.CountAsync();
 
-                    hasMoreData = (page + 1) * pageSize < await query.CountAsync();
+                    hasMoreData = (page + 1) * pageSize < count;
 
                     products = await query
                         .Select(x => new Product
@@ -407,7 +412,8 @@ namespace Smartstore.Admin.Controllers
                 Id = x.Id.ToString(),
                 Text = x.Name,
                 Hint = x.Sku,
-                Selected = ids.Contains(x.Id)
+                Selected = idsSelected.Contains(x.Id),
+                Disabled = idsDisabled.Contains(x.Id)
             })
             .ToList();
 
@@ -1017,6 +1023,7 @@ namespace Smartstore.Admin.Controllers
         {
             var tierPrices = await _db.TierPrices
                 .Where(x => x.ProductId == productId)
+                .OrderBy(x => x.Quantity)
                 .ApplyGridCommand(command)
                 .ToPagedList(command)
                 .LoadAsync();
@@ -1063,15 +1070,14 @@ namespace Smartstore.Admin.Controllers
                         ProductId = x.ProductId,
                         Quantity = x.Quantity,
                         CalculationMethodId = (int)x.CalculationMethod,
-                        Price1 = x.Price
-                    };
-
-                    tierPriceModel.CalculationMethod = x.CalculationMethod switch
-                    {
-                        TierPriceCalculationMethod.Fixed => T("Admin.Product.Price.Tierprices.Fixed").Value,
-                        TierPriceCalculationMethod.Adjustment => T("Admin.Product.Price.Tierprices.Adjustment").Value,
-                        TierPriceCalculationMethod.Percental => T("Admin.Product.Price.Tierprices.Percental").Value,
-                        _ => x.CalculationMethod.ToString(),
+                        Price1 = x.Price,
+                        CalculationMethod = x.CalculationMethod switch
+                        {
+                            TierPriceCalculationMethod.Fixed => T("Admin.Product.Price.Tierprices.Fixed").Value,
+                            TierPriceCalculationMethod.Adjustment => T("Admin.Product.Price.Tierprices.Adjustment").Value,
+                            TierPriceCalculationMethod.Percental => T("Admin.Product.Price.Tierprices.Percental").Value,
+                            _ => x.CalculationMethod.ToString(),
+                        }
                     };
 
                     if (x.CustomerRoleId.HasValue)
@@ -1310,6 +1316,7 @@ namespace Smartstore.Admin.Controllers
         {
             const int pageSize = 500;
             var skip = page * pageSize;
+            var unpublishedStr = T("Common.Unpublished").Value;
 
             var query = _db.ProductTags.AsNoTracking();
 
@@ -1320,15 +1327,17 @@ namespace Smartstore.Admin.Controllers
 
             var tags = await query
                 .OrderBy(x => x.Name)
-                .Select(x => x.Name)
                 .ToPagedList(page - 1, pageSize)
                 .LoadAsync();
 
-            var results = tags.Select(x => new ChoiceListItem
+            var results = tags
+                .Select(x => new ChoiceListItem
                 {
-                    Id = x,
-                    Text = x,
-                    Selected = selectedNames?.Contains(x) ?? false
+                    Id = x.Name,
+                    Text = x.Name,
+                    Selected = selectedNames?.Contains(x.Name) ?? false,
+                    Title = !x.Published ? unpublishedStr : null,
+                    CssClass = !x.Published ? "choice-item-unavailable" : null
                 })
                 .ToList();
 
@@ -1596,6 +1605,12 @@ namespace Smartstore.Admin.Controllers
                     .Distinct()
                     .CountAsync();
 
+                var maxDisplayOrder = (await _db.ProductSpecificationAttributes
+                    .Where(x => x.ProductId == product.Id)
+                    .MaxAsync(x => (int?)x.DisplayOrder)) ?? 0;
+
+                model.AddSpecificationAttributeModel.DisplayOrder = ++maxDisplayOrder;
+
                 // Downloads.
                 var productDownloads = await _db.Downloads
                     .AsNoTracking()
@@ -1644,6 +1659,13 @@ namespace Smartstore.Admin.Controllers
                 model.AddPictureModel.PictureId = product.MainPictureId ?? 0;
 
                 model.ProductTagNames = product.ProductTags.Select(x => x.Name).ToArray();
+
+                // Instance always required because of validation.
+                model.GroupedProductConfiguration ??= new();
+                if (product.ProductType == ProductType.GroupedProduct && product.GroupedProductConfiguration != null)
+                {
+                    MiniMapper.Map(product.GroupedProductConfiguration, model.GroupedProductConfiguration);
+                }
 
                 ViewBag.SelectedProductTags = model.ProductTagNames
                     .Select(x => new SelectListItem { Value = x, Text = x, Selected = true })
@@ -1742,7 +1764,6 @@ namespace Smartstore.Admin.Controllers
             var measureDimensionKeys = await _db.MeasureDimensions.AsNoTracking().OrderBy(x => x.DisplayOrder).Select(x => x.SystemKeyword).ToListAsync();
             var measureUnits = new HashSet<string>(measureUnitKeys.Concat(measureDimensionKeys), StringComparer.OrdinalIgnoreCase);
 
-            // Don't forget biz import!
             if (product != null && !setPredefinedValues && product.BasePriceMeasureUnit.HasValue())
             {
                 measureUnits.Add(product.BasePriceMeasureUnit);
@@ -1791,13 +1812,37 @@ namespace Smartstore.Admin.Controllers
                 })
                 .ToList();
 
-            ViewBag.DefaultComparePriceLabelName = 
-                _priceLabelService.GetDefaultComparePriceLabel()?.GetLocalized(x => x.ShortName)?.Value ?? 
+            ViewBag.DefaultComparePriceLabelName =
+                _priceLabelService.GetDefaultComparePriceLabel()?.GetLocalized(x => x.ShortName)?.Value ??
                 T("Common.Unspecified").Value;
 
-            ViewBag.CartQuantityInfo = T("Admin.Catalog.Products.CartQuantity.Info", 
+            ViewBag.CartQuantityInfo = T("Admin.Catalog.Products.CartQuantity.Info",
                 _shoppingCartSettings.MaxQuantityInputDropdownItems.ToString("N0"),
                 Url.Action("ShoppingCart", "Setting"));
+
+            var defaultAssociatedHeaders = _catalogSettings.CollapsibleAssociatedProductsHeaders
+                .Select(x =>
+                {
+                    switch (x)
+                    {
+                        case AssociatedProductHeader.Image:
+                            return T("Common.Image");
+                        case AssociatedProductHeader.Sku:
+                            return T("Admin.Catalog.Products.Fields.Sku");
+                        case AssociatedProductHeader.Price:
+                            return T("Admin.Catalog.Products.Fields.Price");
+                        case AssociatedProductHeader.Weight:
+                            return T("Admin.Catalog.Products.Fields.Weight");
+                        case AssociatedProductHeader.Dimensions:
+                            return T("Admin.Configuration.Measures.Dimensions");
+                        default:
+                            return null;
+                    };
+                })
+                .Where(x => x != null);
+
+            ViewBag.DefaultAssociatedProductsHeaderFields = string.Join(", ", defaultAssociatedHeaders);
+            ViewBag.AssociatedProductsHeaderFields = CreateAssociatedProductsHeaderFieldsList(model.GroupedProductConfiguration?.HeaderFields ?? [], T, true);
 
             if (setPredefinedValues)
             {
@@ -1818,6 +1863,31 @@ namespace Smartstore.Admin.Controllers
                 model.Published = true;
                 model.HasPreviewPicture = false;
             }
+        }
+
+        internal static List<SelectListItem> CreateAssociatedProductsHeaderFieldsList(string[] headerFields, Localizer T, bool includeName = false)
+        {
+            var fields = new List<SelectListItem>
+            {
+                new() { Value = AssociatedProductHeader.Image, Text = T("Common.Image"), Selected = headerFields.Contains(AssociatedProductHeader.Image) },
+                new() { Value = AssociatedProductHeader.Sku, Text = T("Admin.Catalog.Products.Fields.Sku"), Selected = headerFields.Contains(AssociatedProductHeader.Sku) },
+                new() { Value = AssociatedProductHeader.Price, Text = T("Admin.Catalog.Products.Fields.Price"), Selected = headerFields.Contains(AssociatedProductHeader.Price) },
+                new() { Value = AssociatedProductHeader.Weight, Text = T("Admin.Catalog.Products.Fields.Weight"), Selected = headerFields.Contains(AssociatedProductHeader.Weight) },
+                new() { Value = AssociatedProductHeader.Dimensions, Text = T("Admin.Configuration.Measures.Dimensions"), Selected = headerFields.Contains(AssociatedProductHeader.Dimensions) }
+            };
+
+            if (includeName)
+            {
+                // INFO: workaround to be able to display only the product name as a header for a certain grouped product.
+                fields.Insert(0, new()
+                {
+                    Value = AssociatedProductHeader.Name,
+                    Text = T("Admin.Catalog.ProductReviews.List.ProductName"), 
+                    Selected = headerFields.Contains(AssociatedProductHeader.Name)
+                });
+            }
+
+            return fields;
         }
 
         private async Task PrepareProductFileModelAsync(ProductModel model)
@@ -2065,6 +2135,12 @@ namespace Smartstore.Admin.Controllers
             p.AvailableEndDateTimeUtc = m.AvailableEndDateTimeUtc.HasValue
                 ? Services.DateTimeHelper.ConvertToUtcTime(m.AvailableEndDateTimeUtc.Value)
                 : null;
+
+            if (p.ProductType == ProductType.GroupedProduct)
+            {
+                var config = MiniMapper.Map<GroupedProductConfigurationModel, GroupedProductConfiguration>(model.GroupedProductConfiguration);
+                p.GroupedProductConfiguration = config;
+            }
         }
 
         private async Task UpdateProductDownloadsAsync(Product product, ProductModel model)
@@ -2186,6 +2262,7 @@ namespace Smartstore.Admin.Controllers
 
         private static void UpdateProductAttributes(Product product, ProductModel model)
         {
+            product.AttributeCombinationRequired = model.AttributeCombinationRequired;
             product.AttributeChoiceBehaviour = model.AttributeChoiceBehaviour;
         }
 
@@ -2220,9 +2297,8 @@ namespace Smartstore.Admin.Controllers
             //var seoTabLoaded = m.LoadedTabs.Contains("SEO", StringComparer.OrdinalIgnoreCase);
 
             // SEO.
-            var validateSlugResult = await p.ValidateSlugAsync(m.SeName, true);
-            m.SeName = validateSlugResult.Slug;
-            await _urlService.ApplySlugAsync(validateSlugResult);
+            var slugResult = await _urlService.SaveSlugAsync(p, m.SeName, p.GetDisplayName(), true);
+            m.SeName = slugResult.Slug;
 
             if (editMode)
             {
@@ -2236,8 +2312,7 @@ namespace Smartstore.Admin.Controllers
                 await _localizedEntityService.ApplyLocalizedValueAsync(product, x => x.ShortDescription, localized.ShortDescription, localized.LanguageId);
                 await _localizedEntityService.ApplyLocalizedValueAsync(product, x => x.FullDescription, localized.FullDescription, localized.LanguageId);
 
-                validateSlugResult = await p.ValidateSlugAsync(localized.SeName, localized.Name, false, localized.LanguageId);
-                await _urlService.ApplySlugAsync(validateSlugResult);
+                await _urlService.SaveSlugAsync(p, localized.SeName, localized.Name, false, localized.LanguageId);
             }
 
             await _storeMappingService.ApplyStoreMappingsAsync(p, model.SelectedStoreIds);

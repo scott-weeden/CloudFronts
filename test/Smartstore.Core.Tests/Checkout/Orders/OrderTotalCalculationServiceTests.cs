@@ -13,6 +13,7 @@ using Smartstore.Core.Checkout.Attributes;
 using Smartstore.Core.Checkout.Cart;
 using Smartstore.Core.Checkout.GiftCards;
 using Smartstore.Core.Checkout.Orders;
+using Smartstore.Core.Checkout.Rules;
 using Smartstore.Core.Checkout.Shipping;
 using Smartstore.Core.Checkout.Tax;
 using Smartstore.Core.Common;
@@ -20,6 +21,7 @@ using Smartstore.Core.Common.Configuration;
 using Smartstore.Core.Common.Services;
 using Smartstore.Core.Identity;
 using Smartstore.Core.Localization;
+using Smartstore.Core.Rules;
 using Smartstore.Core.Stores;
 using Smartstore.Test.Common;
 
@@ -45,7 +47,6 @@ namespace Smartstore.Core.Tests.Checkout.Orders
         ShippingSettings _shippingSettings;
         PriceSettings _priceSettings;
         CurrencySettings _currencySettings;
-        ICommonServices _services;
         IPriceCalculatorFactory _priceCalculatorFactory;
         ITaxCalculator _taxCalculator;
         IProductAttributeMaterializer _productAttributeMaterializer;
@@ -79,13 +80,12 @@ namespace Smartstore.Core.Tests.Checkout.Orders
             workContextMock.Setup(x => x.WorkingLanguage).Returns(_language);
 
             _requestCache = new NullRequestCache();
-            _services = new MockCommonServices(DbContext, LifetimeScope);
 
             var productServiceMock = new Mock<IProductService>();
             _productService = productServiceMock.Object;
             productServiceMock
                 .Setup(x => x.CreateProductBatchContext(It.IsAny<IEnumerable<Product>>(), null, _customer, false, false))
-                .Returns(new ProductBatchContext(new List<Product>(), _services, _store, _customer, false));
+                .Returns(new ProductBatchContext(new List<Product>(), DbContext, LifetimeScope, _store, _customer, false));
 
             _currencySettings = new CurrencySettings();
             _rewardPointsSettings = new RewardPointsSettings();
@@ -101,17 +101,17 @@ namespace Smartstore.Core.Tests.Checkout.Orders
             };
             _shippingSettings = new ShippingSettings
             {
-                ActiveShippingRateComputationMethodSystemNames = new List<string>
-                {
+                ActiveShippingRateComputationMethodSystemNames =
+                [
                     "FixedRateTestShippingRateComputationMethod"
-                }
+                ]
             };
 
             var giftCardServiceMock = new Mock<IGiftCardService>();
             _giftCardService = giftCardServiceMock.Object;
             giftCardServiceMock
                 .Setup(x => x.GetValidGiftCardsAsync(It.IsAny<int>(), It.IsAny<Customer>()))
-                .ReturnsAsync(new List<AppliedGiftCard>());
+                .ReturnsAsync([]);
 
             var productAttributeMaterializerMock = new Mock<IProductAttributeMaterializer>();
             _productAttributeMaterializer = productAttributeMaterializerMock.Object;
@@ -148,12 +148,15 @@ namespace Smartstore.Core.Tests.Checkout.Orders
             _taxCalculator = new TaxCalculator(DbContext, _workContext, _roundingHelper, _taxService, _taxSettings);
 
             // INFO: Create real instance of PriceCalculatorFactory with own instances of Calculators
-            _priceCalculatorFactory = new PriceCalculatorFactory(_requestCache, base.GetPriceCalculators(_priceCalculatorFactory, _discountService, _priceSettings));
+            _priceCalculatorFactory = new PriceCalculatorFactory(_requestCache, GetPriceCalculators(_priceCalculatorFactory, _discountService, _priceSettings));
+
+            var ruleProviderFactoryMock = new Mock<IRuleProviderFactory>();
+            ruleProviderFactoryMock.Setup(x => x.GetProvider(RuleScope.Cart, null)).Returns(new Mock<ICartRuleProvider>().Object);
 
             _shippingService = new ShippingService(
                 _productAttributeMaterializer,
                 _checkoutAttributeMaterializer,
-                null,
+                ruleProviderFactoryMock.Object,
                 _shippingSettings,
                 ProviderManager,
                 null,
@@ -231,18 +234,14 @@ namespace Smartstore.Core.Tests.Checkout.Orders
                 Quantity = 3
             };
 
-            var items = new List<OrganizedShoppingCartItem>
-            {
-                new OrganizedShoppingCartItem(sci1),
-                new OrganizedShoppingCartItem(sci2)
-            };
+            var items = new List<OrganizedShoppingCartItem> { new(sci1), new(sci2) };
 
             items.ForEach(sci => sci.Item.Customer = _customer);
             items.ForEach(sci => sci.Item.CustomerId = _customer.Id);
 
             var cart = new ShoppingCart(_customer, 0, items);
 
-            _productBatchContext = new ProductBatchContext(new List<Product> { product1, product2 }, _services, _store, _customer, false);
+            _productBatchContext = new ProductBatchContext(new List<Product> { product1, product2 }, DbContext, LifetimeScope, _store, _customer, false);
 
             //10% - default tax rate
             var subTotal = await _orderCalcService.GetShoppingCartSubtotalAsync(cart, false, _productBatchContext);
@@ -288,18 +287,14 @@ namespace Smartstore.Core.Tests.Checkout.Orders
                 Quantity = 3
             };
 
-            var items = new List<OrganizedShoppingCartItem>
-            {
-                new OrganizedShoppingCartItem(sci1),
-                new OrganizedShoppingCartItem(sci2)
-            };
+            var items = new List<OrganizedShoppingCartItem> { new(sci1), new(sci2) };
 
             items.ForEach(sci => sci.Item.Customer = _customer);
             items.ForEach(sci => sci.Item.CustomerId = _customer.Id);
 
             var cart = new ShoppingCart(_customer, 0, items);
 
-            _productBatchContext = new ProductBatchContext(new List<Product> { product1, product2 }, _services, _store, _customer, false);
+            _productBatchContext = new ProductBatchContext(new List<Product> { product1, product2 }, DbContext, LifetimeScope, _store, _customer, false);
 
             //10% - default tax rate
             var subTotal = await _orderCalcService.GetShoppingCartSubtotalAsync(cart, true, _productBatchContext);
@@ -345,11 +340,7 @@ namespace Smartstore.Core.Tests.Checkout.Orders
                 Quantity = 3
             };
 
-            var items = new List<OrganizedShoppingCartItem>
-            {
-                new OrganizedShoppingCartItem(sci1),
-                new OrganizedShoppingCartItem(sci2)
-            };
+            var items = new List<OrganizedShoppingCartItem> { new(sci1), new(sci2) };
 
             items.ForEach(sci => sci.Item.Customer = _customer);
             items.ForEach(sci => sci.Item.CustomerId = _customer.Id);
@@ -368,7 +359,7 @@ namespace Smartstore.Core.Tests.Checkout.Orders
 
             InitDiscountServiceMock(discount1, DiscountType.AssignedToOrderSubTotal);
 
-            _productBatchContext = new ProductBatchContext(new List<Product> { product1, product2 }, _services, _store, _customer, false);
+            _productBatchContext = new ProductBatchContext(new List<Product> { product1, product2 }, DbContext, LifetimeScope, _store, _customer, false);
 
             //10% - default tax rate
             var subTotal = await _orderCalcService.GetShoppingCartSubtotalAsync(cart, false, _productBatchContext);
@@ -416,11 +407,7 @@ namespace Smartstore.Core.Tests.Checkout.Orders
                 Quantity = 3
             };
 
-            var items = new List<OrganizedShoppingCartItem>
-            {
-                new OrganizedShoppingCartItem(sci1),
-                new OrganizedShoppingCartItem(sci2)
-            };
+            var items = new List<OrganizedShoppingCartItem> { new(sci1), new(sci2) };
 
             items.ForEach(sci => sci.Item.Customer = _customer);
             items.ForEach(sci => sci.Item.CustomerId = _customer.Id);
@@ -439,7 +426,7 @@ namespace Smartstore.Core.Tests.Checkout.Orders
 
             InitDiscountServiceMock(discount1, DiscountType.AssignedToOrderSubTotal);
 
-            _productBatchContext = new ProductBatchContext(new List<Product> { product1, product2 }, _services, _store, _customer, false);
+            _productBatchContext = new ProductBatchContext(new List<Product> { product1, product2 }, DbContext, LifetimeScope, _store, _customer, false);
 
             var subTotal = await _orderCalcService.GetShoppingCartSubtotalAsync(cart, true, _productBatchContext);
 
@@ -869,12 +856,7 @@ namespace Smartstore.Core.Tests.Checkout.Orders
                 }
             };
 
-            var items = new List<OrganizedShoppingCartItem>
-            {
-                new OrganizedShoppingCartItem(sci1),
-                new OrganizedShoppingCartItem(sci2),
-                new OrganizedShoppingCartItem(sci3)
-            };
+            var items = new List<OrganizedShoppingCartItem> { new(sci1), new(sci2), new(sci3) };
 
             items.ForEach(sci => sci.Item.Customer = _customer);
             items.ForEach(sci => sci.Item.CustomerId = _customer.Id);

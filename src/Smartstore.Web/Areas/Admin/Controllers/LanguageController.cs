@@ -5,7 +5,6 @@ using System.Net.Http.Headers;
 using System.Net.Mime;
 using System.Xml;
 using Autofac;
-using Humanizer;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc.Rendering;
 using Newtonsoft.Json;
@@ -80,7 +79,7 @@ namespace Smartstore.Admin.Controllers
                 if (lastImportInfos.TryGetValue(x.Id, out var info))
                 {
                     m.LastResourcesImportOn = Services.DateTimeHelper.ConvertToUserTime(info.ImportedOn, DateTimeKind.Utc);
-                    m.LastResourcesImportOnString = m.LastResourcesImportOn.Humanize(false);
+                    m.LastResourcesImportOnString = m.LastResourcesImportOn.ToHumanizedString(false);
                 }
 
                 if (x.Id == masterLanguageId)
@@ -144,6 +143,8 @@ namespace Smartstore.Admin.Controllers
             var model = new LanguageModel();
             AddLocales(model.Locales);
             await PrepareLanguageModel(model, null, false);
+
+            model.DisplayOrder = ((await _db.Languages.MaxAsync(x => (int?)x.DisplayOrder)) ?? 0) + 1;
 
             return View(model);
         }
@@ -608,10 +609,6 @@ namespace Smartstore.Admin.Controllers
 
                     if (language == null)
                     {
-                        var maxDisplayOrder = await db.Languages
-                            .Where(x => x.Published)
-                            .MaxAsync(x => (int?)x.DisplayOrder, cancelToken);
-
                         language = new Language
                         {
                             LanguageCulture = source.Language.Culture,
@@ -620,7 +617,7 @@ namespace Smartstore.Admin.Controllers
                             FlagImageFileName = GetFlagFileName(source.Language.Culture, appContext),
                             Rtl = source.Language.Rtl,
                             Published = false,
-                            DisplayOrder = maxDisplayOrder.HasValue ? maxDisplayOrder.Value + 1 : 0
+                            DisplayOrder = ((await db.Languages.MaxAsync(x => (int?)x.DisplayOrder, cancelToken)) ?? 0) + 1
                         };
 
                         db.Languages.Add(language);
@@ -879,7 +876,7 @@ namespace Smartstore.Admin.Controllers
                 if (lastImportInfos.TryGetValue(language.Id, out var info))
                 {
                     model.LastResourcesImportOn = Services.DateTimeHelper.ConvertToUserTime(info.ImportedOn, DateTimeKind.Utc);
-                    model.LastResourcesImportOnString = model.LastResourcesImportOn.Humanize(false);
+                    model.LastResourcesImportOnString = model.LastResourcesImportOn.ToHumanizedString(false);
                 }
 
                 // Provide downloadable resources.
@@ -957,7 +954,7 @@ namespace Smartstore.Admin.Controllers
             model.TranslatedPercentage = resources.TranslatedPercentage;
             model.IsDownloadRunning = state != null && state.Id == resources.Id;
             model.UpdatedOn = Services.DateTimeHelper.ConvertToUserTime(resources.UpdatedOn, DateTimeKind.Utc);
-            model.UpdatedOnString = model.UpdatedOn.Humanize(false);
+            model.UpdatedOnString = model.UpdatedOn.ToHumanizedString(false);
             model.FlagImageFileName = GetFlagFileName(resources.Language.Culture, Services.ApplicationContext);
 
             if (language != null && lastImportInfos.TryGetValue(language.Id, out LastResourcesImportInfo info))
@@ -970,7 +967,7 @@ namespace Smartstore.Admin.Controllers
                 }
 
                 model.LastResourcesImportOn = Services.DateTimeHelper.ConvertToUserTime(info.ImportedOn, DateTimeKind.Utc);
-                model.LastResourcesImportOnString = model.LastResourcesImportOn.Humanize(false);
+                model.LastResourcesImportOnString = model.LastResourcesImportOn.ToHumanizedString(false);
             }
         }
 

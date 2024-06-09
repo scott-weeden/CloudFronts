@@ -17,30 +17,39 @@ namespace Smartstore.Web.Models.Catalog
         {
         }
 
+        /// <summary>
+        /// Applies the property references of another <see cref="ProductDetailsModelContext"/> instance.
+        /// Only to be used for child items like associated products or bundle items,
+        /// otherwise use <see cref="CatalogHelper.CreateModelContext"/>.
+        /// </summary>
         public ProductDetailsModelContext(ProductDetailsModelContext other)
         {
             Product = other.Product;
-            AssociatedProducts = other.AssociatedProducts;
             BatchContext = other.BatchContext;
             VariantQuery = other.VariantQuery;
             Customer = other.Customer;
             Store = other.Store;
             Currency = other.Currency;
             DisplayPrices = other.DisplayPrices;
+
+            AssociatedProducts = other.AssociatedProducts;
+            GroupedProductConfiguration = other.GroupedProductConfiguration;
         }
 
         public Product Product { get; set; }
-        public IList<Product> AssociatedProducts { get; set; }
         public ProductBatchContext BatchContext { get; set; }
         public ProductVariantQuery VariantQuery { get; set; }
         public Customer Customer { get; set; }
         public Store Store { get; set; }
         public Currency Currency { get; set; }
+        public bool DisplayPrices { get; set; }
 
         public bool IsAssociatedProduct { get; set; }
-        public ProductBundleItem ProductBundleItem { get; set; }
+        public IList<Product> AssociatedProducts { get; set; }
+        public GroupedProductConfiguration GroupedProductConfiguration { get; set; }
 
-        public bool DisplayPrices { get; set; }
+        public Product ParentProduct { get; set; }
+        public ProductBundleItem ProductBundleItem { get; set; }
 
         /// <summary>
         /// The selected attributes based on <see cref="VariantQuery"/>. <c>null</c> if none have been selected (then the preselected attributes are used).
@@ -51,7 +60,6 @@ namespace Smartstore.Web.Models.Catalog
     public partial class ProductDetailsModel : EntityModelBase
     {
         public MediaGalleryModel MediaGalleryModel { get; set; } = new();
-
         public MetaPropertiesModel MetaProperties { get; set; } = new();
 
         public LocalizedValue<string> Name { get; set; }
@@ -63,10 +71,12 @@ namespace Smartstore.Web.Models.Catalog
         public LocalizedValue<string> MetaTitle { get; set; }
         public string SeName { get; set; }
         public string CanonicalUrl { get; set; }
+        public string UpdateUrl { get; set; }
         public ProductType ProductType { get; set; }
         public bool VisibleIndividually { get; set; }
 
         public int PictureSize { get; set; }
+        public int ThumbDimensions { get; set; }
 
         public ProductCondition Condition { get; set; }
         public bool ShowCondition { get; set; }
@@ -95,20 +105,25 @@ namespace Smartstore.Web.Models.Catalog
 
         public ProductDetailsPriceModel Price { get; set; } = new();
         public AddToCartModel AddToCart { get; set; } = new();
-        public List<ProductVariantAttributeModel> ProductVariantAttributes { get; set; } = new();
+        public List<ProductVariantAttributeModel> ProductVariantAttributes { get; set; } = [];
         public string AttributeInfo { get; set; }
 
         public bool DisplayAdminLink { get; set; }
         public bool ShowLegalInfo { get; set; }
         public string LegalInfo { get; set; }
+
         public bool ShowWeight { get; set; }
         public bool ShowDimensions { get; set; }
-        public decimal WeightValue { get; set; }
+        public string DimensionSystemKeyword { get; set; }
         public string Weight { get; set; }
         public string Length { get; set; }
         public string Width { get; set; }
         public string Height { get; set; }
-        public int ThumbDimensions { get; set; }
+        public decimal WeightValue { get; set; }
+        public decimal LengthValue { get; set; }
+        public decimal WidthValue { get; set; }
+        public decimal HeightValue { get; set; }
+
         public LocalizedValue<string> QuantityUnitName { get; set; }
         public LocalizedValue<string> QuantityUnitNamePlural { get; set; }
         public bool DisplayProductReviews { get; set; }
@@ -128,25 +143,23 @@ namespace Smartstore.Web.Models.Catalog
 
         public ProductVariantAttributeCombination SelectedCombination { get; set; }
 
-        public List<BrandOverviewModel> Brands { get; set; } = new();
+        public List<BrandOverviewModel> Brands { get; set; } = [];
         public int ReviewCount { get; set; }
         public ProductReviewOverviewModel ReviewOverview { get; set; } = new();
 
-
-        // A list of associated products. For example, "Grouped" products could have several child "simple" products
-        public List<ProductDetailsModel> AssociatedProducts { get; set; } = new();
+        public GroupedProductModel GroupedProduct { get; set; }
         public bool IsAssociatedProduct { get; set; }
 
-        public List<ProductDetailsModel> BundledItems { get; set; } = new();
+        public List<ProductDetailsModel> BundledItems { get; set; } = [];
         public ProductBundleItemModel BundleItem { get; set; } = new();
         public bool IsBundlePart { get; set; }
 
-        public List<ProductSpecificationModel> SpecificationAttributes { get; set; } = new();
+        public List<ProductSpecificationModel> SpecificationAttributes { get; set; } = [];
 
-        public List<ProductTagModel> ProductTags { get; set; } = new();
+        public List<ProductTagModel> ProductTags { get; set; } = [];
+        public bool ShowProductTags { get; set; }
 
         public ProductReviewsModel ProductReviews { get; set; } = new();
-
         public ProductSummaryModel AlsoPurchased { get; set; }
         public ProductSummaryModel RelatedProducts { get; set; }
 
@@ -156,7 +169,7 @@ namespace Smartstore.Web.Models.Catalog
         public string HotlineTelephoneNumber { get; set; }
         public string ProductShareCode { get; set; }
 
-        public Dictionary<string, ActionItemModel> ActionItems { get; set; } = new();
+        public Dictionary<string, ActionItemModel> ActionItems { get; set; } = [];
 
         #region Nested Classes
 
@@ -196,10 +209,11 @@ namespace Smartstore.Web.Models.Catalog
             public int? MaxInStock { get; set; }
             public bool HideQuantityControl { get; set; }
             public QuantityControlType QuantityControlType { get; set; }
+            public bool CollapsibleAssociatedProduct { get; set; }
 
             public bool DisableBuyButton { get; set; }
             public bool DisableWishlistButton { get; set; }
-            public List<SelectListItem> AllowedQuantities { get; set; } = new();
+            public List<SelectListItem> AllowedQuantities { get; set; } = [];
             public bool AvailableForPreOrder { get; set; }
         }
 
@@ -235,17 +249,13 @@ namespace Smartstore.Web.Models.Catalog
             public ProductVariantAttribute ProductAttribute { get; set; }
 
             public override string BuildControlId()
-            {
-                return ProductVariantQueryItem.CreateKey(ProductId, BundleItemId, ProductAttributeId, Id);
-            }
+                => ProductVariantQueryItem.CreateKey(ProductId, BundleItemId, ProductAttributeId, Id);
 
             public override string GetFileUploadUrl(IUrlHelper url)
-            {
-                return url.Action("UploadFileProductAttribute", "ShoppingCart", new { productId = ProductId, productAttributeId = ProductAttributeId });
-            }
+                => url.Action("UploadFileProductAttribute", "ShoppingCart", new { productId = ProductId, productAttributeId = ProductAttributeId });
 
             public bool ShouldBeRendered
-                => !(ProductAttribute?.IsListTypeAttribute() ?? false) || Values.Count > 0;
+                => IsActive && (Values.Count > 0 || !(ProductAttribute?.IsListTypeAttribute() ?? false));
         }
 
         public partial class ProductVariantAttributeValueModel : ChoiceItemModel

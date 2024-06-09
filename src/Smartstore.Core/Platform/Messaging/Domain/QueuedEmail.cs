@@ -54,7 +54,7 @@ namespace Smartstore.Core.Messaging
         /// <summary>
         /// Gets or sets the body.
         /// </summary>
-        [MaxLength]
+        [MaxLength, NonSummary]
         public string Body { get; set; }
 
         /// <summary>
@@ -98,7 +98,7 @@ namespace Smartstore.Core.Messaging
         /// </summary>
         public ICollection<QueuedEmailAttachment> Attachments
         {
-            get => _attachments ?? LazyLoader.Load(this, ref _attachments) ?? (_attachments ??= new HashSet<QueuedEmailAttachment>());
+            get => _attachments ?? LazyLoader.Load(this, ref _attachments) ?? (_attachments ??= []);
             protected set => _attachments = value;
         }
     }

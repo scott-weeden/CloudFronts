@@ -1,4 +1,5 @@
-﻿using Smartstore.Core.Configuration;
+﻿using System.Collections.Frozen;
+using Smartstore.Core.Configuration;
 using Smartstore.Core.Localization;
 
 namespace Smartstore.Core.Seo
@@ -53,7 +54,8 @@ namespace Smartstore.Core.Seo
             "/customer/",
             "/order/",
             "/install$",
-            "/install/"
+            "/install/",
+            "*returnUrl=*"
         };
 
         public static ISet<string> DefaultCharConversions { get; } = new HashSet<string>
@@ -69,12 +71,12 @@ namespace Smartstore.Core.Seo
         };
 
         private readonly object _lock = new();
-        private Dictionary<char, string> _charConversionMap = null;
+        private FrozenDictionary<char, string> _charConversionMap = null;
 
         public SeoSettings()
         {
-            ExtraRobotsDisallows = new();
-            ExtraRobotsAllows = new();
+            ExtraRobotsDisallows = [];
+            ExtraRobotsAllows = [];
             SeoNameCharConversion = string.Join(Environment.NewLine, DefaultCharConversions);
         }
 
@@ -160,10 +162,7 @@ namespace Smartstore.Core.Seo
             {
                 lock (_lock)
                 {
-                    if (_charConversionMap == null)
-                    {
-                        _charConversionMap = CreateCharConversionMap(SeoNameCharConversion);
-                    }
+                    _charConversionMap ??= CreateCharConversionMap(SeoNameCharConversion).ToFrozenDictionary();
                 }
             }
 

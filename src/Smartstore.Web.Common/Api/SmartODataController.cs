@@ -10,6 +10,7 @@ using Microsoft.AspNetCore.OData.Results;
 using Microsoft.AspNetCore.OData.Routing.Controllers;
 using Microsoft.OData;
 using Microsoft.OData.UriParser;
+using Smartstore.Core.Seo;
 
 namespace Smartstore.Web.Api
 {
@@ -327,6 +328,16 @@ namespace Smartstore.Web.Api
             }
 
             return NoContent();
+        }
+
+        /// <summary>
+        /// Updates a slug and executes SaveChangesAsync.
+        /// </summary>
+        protected async Task UpdateSlugAsync<T>(T entity)
+            where T : ISlugSupported
+        {
+            var urlService = HttpContext.RequestServices.GetService<IUrlService>();
+            await urlService.SaveSlugAsync(entity, string.Empty, entity.GetDisplayName(), true);
         }
 
         #region Utilities

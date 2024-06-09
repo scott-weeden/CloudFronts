@@ -28,9 +28,6 @@
     <LocaleResource Name="Plugins.FriendlyName.Payments.PayPalGiroPay" AppendRootKey="false">
         <Value>Giropay</Value>
     </LocaleResource>
-    <LocaleResource Name="Plugins.FriendlyName.Payments.PayPalSofort" AppendRootKey="false">
-        <Value>Sofortüberweisung</Value>
-    </LocaleResource>
     <LocaleResource Name="Plugins.FriendlyName.Payments.PayPalBancontact" AppendRootKey="false">
         <Value>Bancontact</Value>
     </LocaleResource>
@@ -94,13 +91,6 @@
         <Value>
             <![CDATA[
 			    Nach Abschluss der Bestellung wird der Kunde direkt zu GiroPay weitergeleitet, um den Bezahlvorgang abzuschließen.
-            ]]>
-        </Value>
-    </LocaleResource>
-    <LocaleResource Name="Plugins.Description.Payments.PayPalSofort" AppendRootKey="false">
-        <Value>
-            <![CDATA[
-			    Nach Abschluss der Bestellung wird der Kunde direkt zu Sofortüberweisung weitergeleitet, um den Bezahlvorgang abzuschließen.
             ]]>
         </Value>
     </LocaleResource>
@@ -192,13 +182,6 @@
                 <Value>
                     <![CDATA[
                         Sie werden auf die Website von Giropay weitergeleitet, um die Zahlung abzuschließen.
-                      ]]>
-                </Value>
-            </LocaleResource>
-            <LocaleResource Name="PayPalSofort" AppendRootKey="false">
-                <Value>
-                    <![CDATA[
-                        Sie werden auf die Website von Sofortüberweisung weitergeleitet, um die Zahlung abzuschließen.
                       ]]>
                 </Value>
             </LocaleResource>
@@ -376,7 +359,6 @@
             <LocaleResource Name="FundingsCart.Hint">
                 <Value>Legt fest, welche Zahlungsoptionen auf der Warenkorbseite angezeigt werden sollen.</Value>
             </LocaleResource>
-
             <LocaleResource Name="PayUponInvoiceLimit">
                 <Value>Obergrenze für Zahlungen auf Rechnung</Value>
             </LocaleResource>
@@ -384,6 +366,14 @@
                 <Value>
                     Legt die Obergrenze fest, bis zu der Zahlungen auf Rechnung angeboten werden.
                     Derzeit liegt diese Grenze bei 2.500 €, kann aber in Einzelfällen davon abweichen.
+                </Value>
+            </LocaleResource>
+            <LocaleResource Name="TransmitTrackingNumbers">
+                <Value>Tracking-Nummern übermitteln</Value>
+            </LocaleResource>
+            <LocaleResource Name="TransmitTrackingNumbers.Hint">
+                <Value>
+                    Legt fest, ob Tracking-Nummern an PayPal gesendet werden sollen, sobald sie in der Sendung eingegeben oder aktualisiert wurden.
                 </Value>
             </LocaleResource>
             

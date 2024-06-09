@@ -15,9 +15,17 @@ namespace Smartstore.Core.Checkout.Payment
 
         /// <summary>
         /// Gets a value indicating whether the payment method requires user input in checkout
-        /// before proceeding, e.g. credit card or direct debit payment.
+        /// before proceeding, e.g. credit card or direct debit payment. Default is <c>false</c>.
         /// </summary>
         bool RequiresInteraction { get; }
+
+        /// <summary>
+        /// Gets a value indicating whether the payment method requires the payment selection page in checkout
+        /// before proceeding. For example, to create a payment transaction at this stage.
+        /// Default is <c>true</c>. If <c>false</c>, then the payment method is qualified for Quick Checkout and 
+        /// <see cref="CreateProcessPaymentRequestAsync"/> must be implemented.
+        /// </summary>
+        bool RequiresPaymentSelection { get; }
 
         /// <summary>
         /// Gets a value indicating whether (later) capturing of the payment amount is supported,
@@ -94,6 +102,17 @@ namespace Smartstore.Core.Checkout.Payment
         /// <returns>Payment summary. <c>null</c> if there is no summary.</returns>
         /// <remarks>Typically used to display the brand name and a masked credit card number.</remarks>
         Task<string> GetPaymentSummaryAsync();
+
+        /// <summary>
+        /// Creates a <see cref="ProcessPaymentRequest"/> for automatic fulfillment of a payment request (Quick Checkout).
+        /// Only required if <see cref="RequiresPaymentSelection"/> is <c>false</c>.
+        /// </summary>
+        /// <param name="cart">Current shopping cart.</param>
+        /// <returns>
+        /// <see cref="ProcessPaymentRequest"/> or <c>null</c> if the payment request cannot be fulfilled automatically.
+        /// In this case, the customer will be directed to the payment selection page.
+        /// </returns>
+        Task<ProcessPaymentRequest> CreateProcessPaymentRequestAsync(ShoppingCart cart);
 
         /// <summary>
         /// Pre-process a payment. Called immediately before <see cref="ProcessPaymentAsync(ProcessPaymentRequest)"/>.

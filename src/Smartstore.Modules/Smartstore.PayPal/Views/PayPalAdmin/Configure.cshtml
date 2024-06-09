@@ -3,7 +3,7 @@
 @{
     Layout = "_ConfigureProvider";
 
-    var trasactModes = new List<SelectListItem>
+    var transactModes = new List<SelectListItem>
     {
         new SelectListItem { Text = T("Plugins.Smartstore.PayPal.Capture"), Value = "capture", Selected = Model.Intent == "capture" },
         new SelectListItem { Text = T("Plugins.Smartstore.PayPal.Auth"), Value = "authorize", Selected = Model.Intent == "authorize" }
@@ -285,7 +285,7 @@
             </div>
             <div class="adminData">
                 <setting-editor asp-for="Intent">
-                    <select asp-for="Intent" asp-items="trasactModes"></select>
+                    <select asp-for="Intent" asp-items="transactModes"></select>
                 </setting-editor>
                 <span asp-validation-for="Intent"></span>
 
@@ -392,6 +392,15 @@
                     <select asp-for="FundingsCart" asp-items="Html.GetLocalizedEnumSelectList(typeof(FundingOptions))" multiple="multiple" data-tags="true"></select>
                 </setting-editor>
                 <span asp-validation-for="FundingsCart"></span>
+            </div>
+        </div>
+        <div class="adminRow">
+            <div class="adminTitle">
+                <smart-label asp-for="TransmitTrackingNumbers" />
+            </div>
+            <div class="adminData">
+                <setting-editor asp-for="TransmitTrackingNumbers"></setting-editor>
+                <span asp-validation-for="TransmitTrackingNumbers"></span>
             </div>
         </div>
     </div>

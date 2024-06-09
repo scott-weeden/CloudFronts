@@ -49,7 +49,7 @@ body {
     }
 }
 
-.touchevents body:not(.has-sticky-content) #page {
+.touchevents body:not(.has-sticky-content):not(.content-overflow-initial) #page {
     // INFO: Sticky elements won't work anymore with overflow-x: hidden on #page element
     // INFO 2: apparently without 'overflow-x: hidden' #page gets very glitchy on mobile. Observe this and leave it active for now.
     overflow-x: hidden;
@@ -61,6 +61,7 @@ body {
 
 #content-wrapper {
     min-height: 300px;
+    overflow-x: hidden;
 }
 
 #content {
@@ -72,7 +73,7 @@ body {
     position: relative;
     z-index: 1;
     background: $body-bg;
-    box-shadow: 0 0 24px rgba(#000, 0.2);
+    box-shadow: 0 0 24px rgba($black, 0.2);
     min-height: 100vh;
 }
 
@@ -156,4 +157,19 @@ b, strong {
 
 .dropdown-menu {
 	--shadow-intensity: #{$dropdown-shadow-intensity};
+}
+
+// Class to turn off overflow-x: hidden on #content-wrapper
+// INFO: We added overflow-x: hidden to #content-wrapper 
+// to prevent a bug with megasized stories, where on page 
+// reload the whole page would be shifted to the left.
+// This class is used to turn this off for specific pages 
+// where this is not needed & causes issues with sticky 
+// elements (e.g. .cart-footer).
+// -----------------------------------------------------
+
+.content-overflow-initial {
+    #content-wrapper {
+        overflow-x: initial;
+    }
 }

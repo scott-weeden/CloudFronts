@@ -74,7 +74,7 @@ namespace Smartstore.Admin.Models
         public int ManufacturerItemsToDisplayOnHomepage { get; set; }
 
         [LocalizedDisplay("*ManufacturerItemsToDisplayInOffcanvasMenu")]
-        public int ManufacturerItemsToDisplayInOffCanvasMenu { get; set; }
+        public int ManufacturerItemsToDisplayInOffcanvasMenu { get; set; }
 
         [LocalizedDisplay("*ShowManufacturerPictures")]
         public bool ShowManufacturerPictures { get; set; }
@@ -165,6 +165,9 @@ namespace Smartstore.Admin.Models
         [LocalizedDisplay("*ShowManufacturerLogoInLists")]
         public bool ShowManufacturerLogoInLists { get; set; }
 
+        [LocalizedDisplay("*LinkManufacturerLogoInLists")]
+        public bool LinkManufacturerLogoInLists { get; set; }
+
         [LocalizedDisplay("*ShowProductOptionsInLists")]
         public bool ShowProductOptionsInLists { get; set; }
 
@@ -179,6 +182,22 @@ namespace Smartstore.Admin.Models
 
         [LocalizedDisplay("*LabelAsNewForMaxDays")]
         public int? LabelAsNewForMaxDays { get; set; }
+
+        #endregion
+
+        #region Grouped product configuration
+
+        [LocalizedDisplay("*AssociatedProductsPageSize")]
+        public int AssociatedProductsPageSize { get; set; }
+
+        [LocalizedDisplay("*SearchMinAssociatedProductsCount")]
+        public int SearchMinAssociatedProductsCount { get; set; }
+
+        [LocalizedDisplay("*CollapsibleAssociatedProducts")]
+        public bool CollapsibleAssociatedProducts { get; set; }
+
+        [LocalizedDisplay("*CollapsibleAssociatedProductsHeaders")]
+        public string[] CollapsibleAssociatedProductsHeaders { get; set; }
 
         #endregion
 
@@ -267,10 +286,13 @@ namespace Smartstore.Admin.Models
         [LocalizedDisplay("*ShowLinkedAttributeValueImage")]
         public bool ShowLinkedAttributeValueImage { get; set; }
 
+        [LocalizedDisplay("*ShowProductTags")]
+        public bool ShowProductTags { get; set; }
+
         #endregion
 
         public PriceSettingsModel PriceSettings { get; set; } = new();
-        public List<PriceSettingsLocalizedModel> Locales { get; set; } = new();
+        public List<PriceSettingsLocalizedModel> Locales { get; set; } = [];
     }
 
     public partial class CatalogSettingsValidator : SettingModelValidator<CatalogSettingsModel, CatalogSettings>
@@ -310,6 +332,9 @@ namespace Smartstore.Admin.Models
                 .WhenSettingOverriden((m, ctx) => m.LabelAsNewForMaxDays != null);
 
             RuleFor(x => x.DisplayAllImagesNumber).GreaterThanOrEqualTo(0);
+
+            RuleFor(x => x.AssociatedProductsPageSize).GreaterThan(0);
+            RuleFor(x => x.SearchMinAssociatedProductsCount).GreaterThanOrEqualTo(0);
         }
     }
 }

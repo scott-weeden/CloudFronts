@@ -1,4 +1,5 @@
-﻿using Smartstore.ComponentModel;
+﻿using Microsoft.VisualBasic;
+using Smartstore.ComponentModel;
 using Smartstore.Core.Catalog;
 using Smartstore.Core.Catalog.Attributes;
 using Smartstore.Core.Catalog.Pricing;
@@ -26,6 +27,13 @@ namespace Smartstore.Web.Models.Cart
 
     public class MiniShoppingCartModelMapper : Mapper<ShoppingCart, MiniShoppingCartModel>
     {
+        static readonly ProductAttributeFormatOptions DefaultAttributeFormatOptions = new()
+        {
+            IncludePrices = false,
+            ItemSeparator = Environment.NewLine,
+            FormatTemplate = "<b>{0}:</b> <span>{1}</span>"
+        };
+
         private readonly SmartDbContext _db;
         private readonly ICommonServices _services;
         private readonly IProductService _productService;
@@ -85,6 +93,8 @@ namespace Smartstore.Web.Models.Cart
 
             var customer = _services.WorkContext.CurrentCustomer;
             var store = _services.StoreContext.CurrentStore;
+            var currency = _services.WorkContext.WorkingCurrency;
+            var taxFormat = _taxService.GetTaxFormat();
 
             to.ShowProductImages = _shoppingCartSettings.ShowProductImagesInMiniShoppingCart;
             to.ThumbSize = _mediaSettings.MiniCartThumbPictureSize;
@@ -92,53 +102,73 @@ namespace Smartstore.Web.Models.Cart
             to.AnonymousCheckoutAllowed = _orderSettings.AnonymousCheckoutAllowed;
             to.DisplayMoveToWishlistButton = await _services.Permissions.AuthorizeAsync(Permissions.Cart.AccessWishlist);
             to.ShowBasePrice = _shoppingCartSettings.ShowBasePrice;
-            to.TotalProducts = from.GetTotalQuantity();
+            to.TotalQuantity = from.GetTotalQuantity();
+            to.DisplayShoppingCartButton = from.HasItems || customer.ShoppingCartItems.FilterByCartType(ShoppingCartType.ShoppingCart, store.Id, false, false).Any();
 
-            if (!from.Items.Any())
+            if (!from.HasItems)
             {
                 return;
             }
 
-            var taxFormat = _taxService.GetTaxFormat();
-            var batchContext = _productService.CreateProductBatchContext(from.Items.Select(x => x.Item.Product).ToArray(), null, customer, false);
-
+            var batchContext = _productService.CreateProductBatchContext(from.GetAllProducts(), null, customer, false);
             var subtotal = await _orderCalculationService.GetShoppingCartSubtotalAsync(from, null, batchContext);
             var lineItems = subtotal.LineItems.ToDictionarySafe(x => x.Item.Item.Id);
+            var subtotalAmount = subtotal.SubtotalWithoutDiscount.Amount;
+            //var subtotalAmount = 0m;
 
-            var currency = _services.WorkContext.WorkingCurrency;
-            var subtotalWithoutDiscount = _currencyService.ConvertFromPrimaryCurrency(subtotal.SubtotalWithoutDiscount.Amount, currency);
-            to.SubTotal = subtotalWithoutDiscount.WithPostFormat(taxFormat);
+            //if (from.Items.Any(x => !x.Active))
+            //{
+            //    // Exclude inactive cart items from subtotal calculation.
+            //    var activeItemsSubtotal = await _orderCalculationService.GetShoppingCartSubtotalAsync(new(from, from.Items.Where(x => x.Active)), null, batchContext);
+            //    subtotalAmount = activeItemsSubtotal.SubtotalWithoutDiscount.Amount;
+            //}
+            //else
+            //{
+            //    subtotalAmount = subtotal.SubtotalWithoutDiscount.Amount;
+            //}
+
+            to.SubTotal = _currencyService.ConvertFromPrimaryCurrency(subtotalAmount, currency).WithPostFormat(taxFormat);
 
             // A customer should visit the shopping cart page before going to checkout if:
-            // 1. There is at least one checkout attribute that is reqired
-            // 2. Min order sub total is OK
-
+            // 1. There is at least one checkout attribute that is reqired.
+            // 2. Min order subtotal is OK.
+            // 3. The cart contains at least one active item.
             var checkoutAttributes = await _checkoutAttributeMaterializer.GetCheckoutAttributesAsync(from, store.Id);
-            to.DisplayCheckoutButton = !checkoutAttributes.Any(x => x.IsRequired);
+            to.DisplayCheckoutButton = !checkoutAttributes.Any(x => x.IsRequired) && from.Items.Any(x => x.Active);
 
             // Products sort descending (recently added products).
             foreach (var cartItem in from.Items)
             {
                 var item = cartItem.Item;
-                var product = cartItem.Item.Product;
+                var product = item.Product;
                 var productSeName = await product.GetActiveSlugAsync();
+
+                var attributesInfo = await _productAttributeFormatter.FormatAttributesAsync(
+                    item.AttributeSelection,
+                    product,
+                    DefaultAttributeFormatOptions,
+                    customer,
+                    batchContext);
 
                 var cartItemModel = new MiniShoppingCartModel.ShoppingCartItemModel
                 {
                     Id = item.Id,
+                    Active = cartItem.Active,
                     ProductId = product.Id,
                     ProductName = product.GetLocalized(x => x.Name),
                     ShortDesc = product.GetLocalized(x => x.ShortDescription),
                     ProductSeName = productSeName,
                     CreatedOnUtc = item.UpdatedOnUtc,
                     ProductUrl = await _productUrlHelper.GetProductUrlAsync(productSeName, cartItem),
-                    AttributeInfo = await _productAttributeFormatter.FormatAttributesAsync(
-                        item.AttributeSelection,
-                        product,
-                        new ProductAttributeFormatOptions { FormatTemplate = "<b>{0}:</b> <span>{1}</span>", ItemSeparator = Environment.NewLine, IncludePrices = false, IncludeHyperlinks = false, IncludeGiftCardAttributes = false },
-                        null,
-                        batchContext: batchContext)
+                    AttributeInfo = attributesInfo
                 };
+
+                if (_shoppingCartSettings.ShowEssentialAttributesInMiniShoppingCart)
+                {
+                    cartItemModel.EssentialSpecAttributesInfo = _productAttributeFormatter.FormatSpecificationAttributes(
+                        await batchContext.EssentialAttributes.GetOrLoadAsync(product.Id),
+                        DefaultAttributeFormatOptions);
+                }
 
                 await cartItem.MapQuantityInputAsync(cartItemModel, mapUnitName: false);
 
@@ -185,18 +215,21 @@ namespace Smartstore.Web.Models.Cart
                 }
 
                 // Unit prices.
-                if (product.CallForPrice)
+                if (lineItems.TryGetValue(item.Id, out var lineItem))
                 {
-                    cartItemModel.UnitPrice = new(0, currency, false, T("Products.CallForPrice"));
-                }
-                else if (lineItems.TryGetValue(item.Id, out var lineItem))
-                {
-                    var unitPrice = _currencyService.ConvertFromPrimaryCurrency(lineItem.UnitPrice.FinalPrice.Amount, currency);
-                    cartItemModel.UnitPrice = unitPrice.WithPostFormat(taxFormat);
-
-                    if (unitPrice != 0 && to.ShowBasePrice)
+                    if (lineItem.UnitPrice.PricingType == PricingType.CallForPrice)
                     {
-                        cartItemModel.BasePriceInfo = _priceCalculationService.GetBasePriceInfo(item.Product, unitPrice, currency);
+                        cartItemModel.UnitPrice = lineItem.UnitPrice.FinalPrice;
+                    }
+                    else
+                    {
+                        var unitPrice = _currencyService.ConvertFromPrimaryCurrency(lineItem.UnitPrice.FinalPrice.Amount, currency);
+                        cartItemModel.UnitPrice = unitPrice.WithPostFormat(taxFormat);
+
+                        if (unitPrice != 0 && to.ShowBasePrice)
+                        {
+                            cartItemModel.BasePriceInfo = _priceCalculationService.GetBasePriceInfo(item.Product, unitPrice, currency);
+                        }
                     }
                 }
 

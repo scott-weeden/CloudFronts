@@ -10,6 +10,7 @@ namespace Smartstore.Admin.Models.Customers
     [LocalizedDisplay("Admin.Customers.Customers.Fields.")]
     public class CustomerModel : TabbableModel
     {
+        public bool IsGuest { get; set; }
         public bool AllowUsersToChangeUsernames { get; set; }
         public bool UsernamesEnabled { get; set; }
 
@@ -78,7 +79,7 @@ namespace Smartstore.Admin.Models.Customers
         public bool CountryEnabled { get; set; }
 
         [LocalizedDisplay("*Country")]
-        public int CountryId { get; set; }
+        public int? CountryId { get; set; }
 
         public bool StateProvinceEnabled { get; set; }
 
@@ -111,13 +112,18 @@ namespace Smartstore.Admin.Models.Customers
 
         [LocalizedDisplay("*TimeZoneId")]
         public string TimeZoneId { get; set; }
-
         public bool AllowCustomersToSetTimeZone { get; set; }
 
         [LocalizedDisplay("*VatNumber")]
         public string VatNumber { get; set; }
         public string VatNumberStatusNote { get; set; }
         public bool DisplayVatNumber { get; set; }
+
+        [LocalizedDisplay("Account.Fields.PreferredShippingMethod")]
+        public int? PreferredShippingMethodId { get; set; }
+
+        [LocalizedDisplay("Account.Fields.PreferredPaymentMethod")]
+        public string PreferredPaymentMethod { get; set; }
 
         [LocalizedDisplay("Common.CreatedOn")]
         public DateTime CreatedOn { get; set; }
@@ -127,6 +133,15 @@ namespace Smartstore.Admin.Models.Customers
 
         [LocalizedDisplay("*IPAddress")]
         public string LastIpAddress { get; set; }
+
+        [LocalizedDisplay("Admin.Rules.FilterDescriptor.LastUserAgent")]
+        public string LastUserAgent { get; set; }
+
+        [LocalizedDisplay("Admin.Rules.FilterDescriptor.LastDeviceFamily")]
+        public string LastUserDeviceType { get; set; }
+
+        [LocalizedDisplay("Admin.Customers.OnlineCustomers.Fields.Location")]
+        public string Location { get; set; }
 
         [LocalizedDisplay("*LastVisitedPage")]
         public string LastVisitedPage { get; set; }
@@ -144,13 +159,13 @@ namespace Smartstore.Admin.Models.Customers
         public bool DisplayProfileLink { get; set; }
 
         [LocalizedDisplay("Admin.Customers.Customers.AssociatedExternalAuth")]
-        public List<AssociatedExternalAuthModel> AssociatedExternalAuthRecords { get; set; } = new();
+        public List<AssociatedExternalAuthModel> AssociatedExternalAuthRecords { get; set; } = [];
 
         public bool Deleted { get; set; }
         public string EditUrl { get; set; }
         public bool HasOrders { get; set; }
         public PermissionTree PermissionTree { get; set; }
-        public List<AddressModel> Addresses { get; set; } = new();
+        public AddressesModel Addresses { get; set; }
 
         #region Nested classes
 
@@ -196,6 +211,20 @@ namespace Smartstore.Admin.Models.Customers
             public string Body { get; set; }
         }
 
+        public class SendEmailValidator : SmartValidator<SendEmailModel>
+        {
+            public SendEmailValidator()
+            {
+                RuleFor(x => x.Subject).NotEmpty();
+                RuleFor(x => x.Body).NotEmpty();
+            }
+        }
+
+        public class AddressesModel : EntityModelBase
+        {
+            public List<AddressModel> Addresses { get; set; }
+        }
+
         [LocalizedDisplay("Admin.Customers.Customers.Orders.")]
         public class OrderModel : EntityModelBase
         {
@@ -222,14 +251,31 @@ namespace Smartstore.Admin.Models.Customers
             public string EditUrl { get; set; }
         }
 
-        public class SendEmailValidator : SmartValidator<SendEmailModel>
+        [LocalizedDisplay("Account.ChangePassword.Fields.")]
+        public class ChangePasswordModel : EntityModelBase
         {
-            public SendEmailValidator()
+            [LocalizedDisplay("*NewPassword")]
+            [DataType(DataType.Password)]
+            public string Password { get; set; }
+
+            [DataType(DataType.Password)]
+            [LocalizedDisplay("*ConfirmNewPassword")]
+            public string ConfirmPassword { get; set; }
+        }
+
+        public class ChangePasswordValidator : AbstractValidator<ChangePasswordModel>
+        {
+            public ChangePasswordValidator(Localizer T)
             {
-                RuleFor(x => x.Subject).NotEmpty();
-                RuleFor(x => x.Body).NotEmpty();
+                RuleFor(x => x.Password).NotEmpty();
+
+                RuleFor(x => x.ConfirmPassword)
+                    .NotEmpty()
+                    .Equal(x => x.Password)
+                    .WithMessage(T("Identity.Error.PasswordMismatch"));
             }
         }
+
         #endregion
     }
 
@@ -237,56 +283,60 @@ namespace Smartstore.Admin.Models.Customers
     {
         public CustomerValidator(Localizer T, CustomerSettings customerSettings)
         {
-            RuleFor(x => x.Password).NotEmpty().When(x => x.Id == 0);
+            // Only validate when customer is not guest.
+            When(x => !x.IsGuest, () =>
+            {
+                RuleFor(x => x.Password).NotEmpty().When(x => x.Id == 0);
 
-            if (customerSettings.FirstNameRequired)
-            {
-                RuleFor(x => x.FirstName).NotEmpty();
-            }
-            
-            RuleFor(x => x.FirstName).ValidName(T);
+                if (customerSettings.FirstNameRequired)
+                {
+                    RuleFor(x => x.FirstName).NotEmpty();
+                }
 
-            if (customerSettings.LastNameRequired)
-            {
-                RuleFor(x => x.LastName).NotEmpty();
-            }
-            
-            RuleFor(x => x.LastName).ValidName(T);
+                RuleFor(x => x.FirstName).ValidName(T);
 
-            if (customerSettings.CompanyRequired && customerSettings.CompanyEnabled)
-            {
-                RuleFor(x => x.Company).NotEmpty();
-            }
-            
-            if (customerSettings.StreetAddressRequired && customerSettings.StreetAddressEnabled)
-            {
-                RuleFor(x => x.StreetAddress).NotEmpty();
-            }
-            
-            if (customerSettings.StreetAddress2Required && customerSettings.StreetAddress2Enabled)
-            {
-                RuleFor(x => x.StreetAddress2).NotEmpty();
-            }
-            
-            if (customerSettings.ZipPostalCodeRequired && customerSettings.ZipPostalCodeEnabled)
-            {
-                RuleFor(x => x.ZipPostalCode).NotEmpty();
-            }
-            
-            if (customerSettings.CityRequired && customerSettings.CityEnabled)
-            {
-                RuleFor(x => x.City).NotEmpty();
-            }
-            
-            if (customerSettings.PhoneRequired && customerSettings.PhoneEnabled)
-            {
-                RuleFor(x => x.Phone).NotEmpty();
-            }
-            
-            if (customerSettings.FaxRequired && customerSettings.FaxEnabled)
-            {
-                RuleFor(x => x.Fax).NotEmpty();
-            }
+                if (customerSettings.LastNameRequired)
+                {
+                    RuleFor(x => x.LastName).NotEmpty();
+                }
+
+                RuleFor(x => x.LastName).ValidName(T);
+
+                if (customerSettings.CompanyRequired && customerSettings.CompanyEnabled)
+                {
+                    RuleFor(x => x.Company).NotEmpty();
+                }
+
+                if (customerSettings.StreetAddressRequired && customerSettings.StreetAddressEnabled)
+                {
+                    RuleFor(x => x.StreetAddress).NotEmpty();
+                }
+
+                if (customerSettings.StreetAddress2Required && customerSettings.StreetAddress2Enabled)
+                {
+                    RuleFor(x => x.StreetAddress2).NotEmpty();
+                }
+
+                if (customerSettings.ZipPostalCodeRequired && customerSettings.ZipPostalCodeEnabled)
+                {
+                    RuleFor(x => x.ZipPostalCode).NotEmpty();
+                }
+
+                if (customerSettings.CityRequired && customerSettings.CityEnabled)
+                {
+                    RuleFor(x => x.City).NotEmpty();
+                }
+
+                if (customerSettings.PhoneRequired && customerSettings.PhoneEnabled)
+                {
+                    RuleFor(x => x.Phone).NotEmpty();
+                }
+
+                if (customerSettings.FaxRequired && customerSettings.FaxEnabled)
+                {
+                    RuleFor(x => x.Fax).NotEmpty();
+                }
+            });
         }
     }
 }

@@ -155,7 +155,7 @@ body {
 
     @include media-breakpoint-up(sm) {
         margin: 0 var(--content-padding-x);
-        border-radius: var(--border-radius-lg) var(--border-radius-lg) 0 0;
+        border-radius: 0.75rem 0.75rem 0 0;
     }
 
     .popup & {
@@ -237,7 +237,7 @@ body {
             vertical-align: top;
         }
 
-        a:not(.btn) {
+        a:not(.btn):not(.dropdown-item) {
             text-decoration: none;
             font-family: $font-family-sans-serif;
             font-size: 12px;
@@ -252,7 +252,6 @@ body {
         width: auto;
         max-width: none; // Reset earlier grid tiers
         padding-inline: 5px 0;
-
         display: flex;
         align-items: center;
         gap: 0.4rem;
@@ -1688,4 +1687,16 @@ a.editable {
     z-index: $zindex-dropdown - 1;
     transform: rotate(90deg) translateX(100%);
     transform-origin: right top;
+}
+
+// AI dropdown
+// --------------------------------------------------------------
+
+.cnt-ai-dialog-opener {
+    display: block !important;
+}
+
+.ai-dialog-opener {
+    pointer-events: initial !important;
+    height: auto !important;
 }

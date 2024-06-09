@@ -12,6 +12,7 @@ using Smartstore.Core.Stores;
 using Smartstore.Core.Web;
 using Smartstore.Data.Hooks;
 using Smartstore.Net;
+using Smartstore.Threading;
 using Smartstore.Utilities;
 
 namespace Smartstore.Core
@@ -28,16 +29,17 @@ namespace Smartstore.Core
         const string CUSTOMERROLES_TAX_DISPLAY_TYPES_KEY = "customerroles:taxdisplaytypes-{0}-{1}";
         const string CUSTOMERROLES_TAX_DISPLAY_TYPES_PATTERN_KEY = "customerroles:taxdisplaytypes*";
 
-        private readonly static Func<DetectCustomerContext, Task<Customer>>[] _customerDetectors = new[] 
-        {
+        private readonly static Func<DetectCustomerContext, Task<Customer>>[] _customerDetectors =
+        [
             DetectTaskScheduler,
             DetectPdfConverter,
             DetectAuthenticated,
             DetectGuest,
+            DetectBotForMedia,
             DetectBot,
             DetectWebhookEndpoint,
             DetectByClientIdent
-        };
+        ];
 
         private readonly SmartDbContext _db;
         private readonly IHttpContextAccessor _httpContextAccessor;
@@ -80,6 +82,8 @@ namespace Smartstore.Core
             _geoCountryLookup = geoCountryLookup;
         }
 
+        public ILogger Logger { get; set; } = NullLogger.Instance;
+
         public override async Task<HookResult> OnAfterSaveAsync(IHookedEntity entry, CancellationToken cancelToken)
         {
             if (entry.Entity is CustomerRole)
@@ -101,7 +105,7 @@ namespace Smartstore.Core
             }
         }
 
-        public async virtual Task<(Customer, Customer)> ResolveCurrentCustomerAsync()
+        public async Task<(Customer, Customer)> ResolveCurrentCustomerAsync()
         {
             var context = new DetectCustomerContext
             {
@@ -109,9 +113,23 @@ namespace Smartstore.Core
                 CustomerService = _customerService,
                 Db = _db,
                 HttpContext = _httpContextAccessor.HttpContext,
-                UserAgent = _userAgent
+                UserAgent = _userAgent,
+                WebHelper = _webHelper
             };
 
+            try
+            {
+                var result = await ResolveCurrentCustomerCoreAsync(context);
+                return result;
+            }
+            finally
+            {
+                await ReleaseIdentLockAsync(context);
+            }
+        }
+
+        protected virtual async Task<(Customer, Customer)> ResolveCurrentCustomerCoreAsync(DetectCustomerContext context)
+        {
             Customer customer = null;
 
             for (var i = 0; i < _customerDetectors.Length; i++)
@@ -149,7 +167,7 @@ namespace Smartstore.Core
                 // No record yet or account deleted/deactivated.
                 // Also dont' treat registered customers as guests.
                 // Create new record in these cases.
-                customer = await CreateGuestCustomerAsync();
+                customer = await CreateGuestCustomerAsync(context.ClientIdent);
             }
 
             return (customer, null);
@@ -173,9 +191,9 @@ namespace Smartstore.Core
             return null;
         }
 
-        protected virtual async Task<Customer> CreateGuestCustomerAsync()
+        protected virtual async Task<Customer> CreateGuestCustomerAsync(string clientIdent)
         {
-            var customer = await _customerService.CreateGuestCustomerAsync();
+            var customer = await _customerService.CreateGuestCustomerAsync(clientIdent);
 
             _customerService.AppendVisitorCookie(customer);
 
@@ -388,13 +406,18 @@ namespace Smartstore.Core
         
         #region Customer resolvers
 
-        private class DetectCustomerContext
+        protected class DetectCustomerContext
         {
-            public DefaultWorkContextSource WorkContextSource { get; set; }
-            public HttpContext HttpContext { get; set; }
-            public SmartDbContext Db { get; set; }
-            public ICustomerService CustomerService { get; set; }
-            public IUserAgent UserAgent { get; set; }
+            public DefaultWorkContextSource WorkContextSource { get; init; }
+            public HttpContext HttpContext { get; init; }
+            public SmartDbContext Db { get; init; }
+            public ICustomerService CustomerService { get; init; }
+            public IUserAgent UserAgent { get; init; }
+            public IWebHelper WebHelper { get; init; }
+
+            public Guid? CustomerGuid { get; set; }
+            public string ClientIdent { get; set; }
+            public ILockHandle LockHandle { get; set; }
         }
 
         private static Task<Customer> DetectAuthenticated(DetectCustomerContext context)
@@ -447,7 +470,7 @@ namespace Smartstore.Core
                     var customer = await context.CustomerService.GetCustomerBySystemNameAsync(SystemCustomerNames.WebhookClient);
                     if (customer == null)
                     {
-                        customer = await context.CustomerService.CreateGuestCustomerAsync(false, c =>
+                        customer = await context.CustomerService.CreateGuestCustomerAsync(null, c =>
                         {
                             c.Email = "builtin@webhook-client.com";
                             c.AdminComment = "Built-in system record used for webhook clients.";
@@ -468,6 +491,8 @@ namespace Smartstore.Core
             var visitorCookie = context.HttpContext?.Request?.Cookies[CookieNames.Visitor];
             if (visitorCookie != null && Guid.TryParse(visitorCookie, out var customerGuid))
             {
+                context.CustomerGuid = customerGuid;
+                
                 // Cookie present. Try to load guest customer by it's value.
                 var customer = await context.Db.Customers
                     //.IncludeShoppingCart()
@@ -485,10 +510,41 @@ namespace Smartstore.Core
             return null;
         }
 
+        private static Task<Customer> DetectBotForMedia(DetectCustomerContext context)
+        {
+            // Don't overstress the system with guest detection for media files.
+            // If there's no endpoint, it's most likely a media file request.
+            // Bad bots don't accept cookies anyway. If there is no visitor cookie, it's a bot.
+            if (context.CustomerGuid == null && context.HttpContext.GetEndpoint() == null)
+            {
+                return context.CustomerService.GetCustomerBySystemNameAsync(SystemCustomerNames.Bot);
+            }
+
+            return Task.FromResult<Customer>(null);
+        }
+
         private static async Task<Customer> DetectByClientIdent(DetectCustomerContext context)
         {
-            // No anonymous visitor cookie yet. Try to identify anyway (by IP and UserAgent combination)
-            var customer = await context.CustomerService.FindCustomerByClientIdentAsync(maxAgeSeconds: 300);
+            // No anonymous visitor cookie yet. Try to identify anyway (by IP and UserAgent combination).
+            var clientIdent = context.WebHelper.GetClientIdent();
+            context.ClientIdent = clientIdent;
+
+            var customer = await context.CustomerService.FindCustomerByClientIdentAsync(clientIdent, maxAgeSeconds: 300);
+
+            if (customer == null)
+            {
+                // Prevent another parallel request to recreate the guest customer with same client ident.
+                var lockProvider = context.HttpContext.RequestServices.GetRequiredService<IDistributedLockProvider>();
+                var @lock = lockProvider.GetLock("clientident:" + clientIdent);
+
+                if ((await @lock.TryAcquireAsync(TimeSpan.FromSeconds(2))).Out(out var lockHandle))
+                {
+                    context.LockHandle = lockHandle;
+
+                    // Try again after lock acquisition. Guest account may have been created in the meantime.
+                    customer = await context.CustomerService.FindCustomerByClientIdentAsync(clientIdent, maxAgeSeconds: 300);
+                }
+            }
 
             if (customer != null)
             {
@@ -504,6 +560,15 @@ namespace Smartstore.Core
             }
 
             return customer;
+        }
+
+        private static async Task ReleaseIdentLockAsync(DetectCustomerContext context)
+        {
+            if (context.LockHandle != null)
+            {
+                await context.LockHandle.ReleaseAsync();
+                context.LockHandle = null;
+            }
         }
 
         #endregion

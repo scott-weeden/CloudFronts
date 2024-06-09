@@ -152,7 +152,7 @@ namespace Smartstore.Core.Installation
             return entities;
         }
 
-        private IList<Product> GetFashionProducts(
+        private List<Product> GetFashionProducts(
             Dictionary<string, Category> categories,
             Dictionary<string, Manufacturer> manufacturers,
             Dictionary<int, SpecificationAttribute> specAttributes)
@@ -163,8 +163,8 @@ namespace Smartstore.Core.Installation
             var firstDeliveryTime = _db.DeliveryTimes.First(x => x.DisplayOrder == 0);
             var thirdDeliveryTime = _db.DeliveryTimes.First(x => x.DisplayOrder == 2);
 
-            var specOptionCotton = (_db.SpecificationAttributes.First(x => x.DisplayOrder == 8)).SpecificationAttributeOptions.First(x => x.DisplayOrder == 9);
-            var taxCategoryIdApparel = (_db.TaxCategories.First(x => x.Name.Equals(TaxNameApparel))).Id;
+            var specOptionCotton = _db.SpecificationAttributes.First(x => x.DisplayOrder == 8).SpecificationAttributeOptions.First(x => x.DisplayOrder == 9);
+            var taxCategoryIdApparel = _db.TaxCategories.First(x => x.Name.Equals(TaxNameApparel)).Id;
 
             #region Category Shoes
 
@@ -666,11 +666,13 @@ namespace Smartstore.Core.Installation
             };
         }
 
-        private IList<Product> GetFurnitureProducts(Dictionary<string, Category> categories, Dictionary<int, SpecificationAttribute> specAttributes)
+        private List<Product> GetFurnitureProducts(
+            Dictionary<string, Category> categories,
+            Dictionary<int, SpecificationAttribute> specAttributes)
         {
             var productTemplateSimple = _db.ProductTemplates.First(x => x.ViewPath == "Product");
             var thirdDeliveryTime = _db.DeliveryTimes.First(x => x.DisplayOrder == 2);
-            var taxCategoryIdElectronics = (_db.TaxCategories.First(x => x.Name.Equals(TaxNameElectronics))).Id;
+            var taxCategoryIdElectronics = _db.TaxCategories.First(x => x.Name.Equals(TaxNameElectronics)).Id;
             var discounts = _db.Discounts.Where(x => x.DiscountTypeId == (int)DiscountType.AssignedToSkus && !x.RequiresCouponCode).ToList();
 
             #region Category Sofas
@@ -879,6 +881,38 @@ namespace Smartstore.Core.Installation
             });
 
             #endregion Mies van der Rohe Barcelona
+
+            var groupedProductConfig = new GroupedProductConfiguration
+            {
+                Collapsible = true,
+                HeaderFields = [AssociatedProductHeader.Image, AssociatedProductHeader.Sku, AssociatedProductHeader.Price]
+            };
+
+            var groupedSofasAndChairs = new Product
+            {
+                ProductType = ProductType.GroupedProduct,
+                Sku = "armchairs-sofas-group",
+                Name = "Armchairs and Sofas",
+                ShortDescription = "Explore comfort and style with our exclusive selection of sofas and chairs! From elegant designs to modern classics, our furniture pieces will transform your home into a haven of luxury. Visit us today and find the perfect pieces to complete your living space!",
+                FullDescription = "<p>Welcome to our exclusive furniture sale event! Dive into the comfort and elegance of our curated collection of sofas and chairs, designed to elevate your home décor to new heights. From plush sofas that beckon relaxation to stylish chairs that blend form with function, we have the perfect pieces to suit your lifestyle and preferences.</p><p>Crafted with precision and attention to detail, our furniture exudes quality and sophistication, ensuring both comfort and durability for years to come. Visit us today to experience luxury living at its finest and find the perfect addition to your home!</p>",
+                ProductTemplateId = productTemplateSimple.Id,
+                AllowCustomerReviews = true,
+                Published = true,
+                MetaTitle = "Armchairs and Sofas",
+                Price = 0.0M,
+                ManageInventoryMethod = ManageInventoryMethod.DontManageStock,
+                OrderMinimumQuantity = 1,
+                OrderMaximumQuantity = 3,
+                StockQuantity = 10000,
+                NotifyAdminForQuantityBelow = 1,
+                AllowBackInStockSubscriptions = false,
+                IsShippingEnabled = true,
+                ShowOnHomePage = true,
+                TaxCategoryId = taxCategoryIdElectronics,
+                GroupedProductConfiguration = groupedProductConfig
+            };
+
+            groupedSofasAndChairs.ProductCategories.Add(new ProductCategory { Category = categories["Furniture"], DisplayOrder = 0 });
 
             #endregion Category Sofas
 
@@ -1266,11 +1300,11 @@ namespace Smartstore.Core.Installation
 
             #endregion Category Armchairs
 
-            return new List<Product>
-            {
+            return
+            [
                miesBarcelonaTable, noguchiTable, corbusierTable, ballChair, loungeChair, cubeChair,
-               miesBarcelonaSofa, corbusierSofa, josefHoffmannSofa
-            };
+               miesBarcelonaSofa, corbusierSofa, josefHoffmannSofa, groupedSofasAndChairs
+            ];
         }
 
         public IList<Product> Products()
@@ -1282,10 +1316,10 @@ namespace Smartstore.Core.Installation
             var secondDeliveryTime = _db.DeliveryTimes.First(x => x.DisplayOrder == 1);
             var thirdDeliveryTime = _db.DeliveryTimes.First(x => x.DisplayOrder == 2);
 
-            var manufacturers = (_db.Manufacturers.ToList()).ToDictionarySafe(x => x.Name, x => x);
-            var categories = (_db.Categories.ToList()).ToDictionarySafe(x => x.Alias, x => x);
-            var specAttributes = (_db.SpecificationAttributes.ToList()).ToDictionarySafe(x => x.DisplayOrder, x => x);
-            var taxCategories = (_db.TaxCategories.ToList()).ToDictionarySafe(x => x.Name, x => x);
+            var manufacturers = _db.Manufacturers.ToList().ToDictionarySafe(x => x.Name, x => x);
+            var categories = _db.Categories.ToList().ToDictionarySafe(x => x.Alias, x => x);
+            var specAttributes = _db.SpecificationAttributes.ToList().ToDictionarySafe(x => x.DisplayOrder, x => x);
+            var taxCategories = _db.TaxCategories.ToList().ToDictionarySafe(x => x.Name, x => x);
 
             #region Category Sports
 
@@ -3655,7 +3689,7 @@ namespace Smartstore.Core.Installation
             return entities;
         }
 
-        public IList<ProductBundleItem> ProductBundleItems()
+        public List<ProductBundleItem> ProductBundleItems()
         {
             var products = (_db.Products.ToList()).ToDictionarySafe(x => x.Sku, x => x);
 
@@ -3844,12 +3878,21 @@ namespace Smartstore.Core.Installation
         public void AssignGroupedProducts(IList<Product> savedProducts)
         {
             var productGamingAccessoriesId = savedProducts.First(x => x.Sku == "Sony-GroupAccessories").Id;
-            var gamingAccessoriesSkus = new List<string>() { "Sony-PS399004", "PD-Minecraft4ps4", "Sony-PS410037", "Sony-PS410040" };
+            var gamingAccessoriesSkus = new[] {"Sony-PS399004", "PD-Minecraft4ps4", "Sony-PS410037", "Sony-PS410040" };
 
             savedProducts
                 .Where(x => gamingAccessoriesSkus.Contains(x.Sku))
-                .ToList()
                 .Each(x => x.ParentGroupedProductId = productGamingAccessoriesId);
+
+            var groupedSofasAndChairs = savedProducts.First(x => x.Sku == "armchairs-sofas-group");
+            var groupedSofasAndChairsSkus = new[] { "LC2 DS/23-1", "JH DS/82-1", "LR 556", "Furniture-ball-chair", "Furniture-lounge-chair", "Furniture-cube-chair" };
+
+            savedProducts
+                .Where(x => groupedSofasAndChairsSkus.Contains(x.Sku))
+                .Each(x => x.ParentGroupedProductId = groupedSofasAndChairs.Id);
+
+            var file = savedProducts.First(x => x.Sku == "Furniture-ball-chair").ProductMediaFiles.Last();
+            groupedSofasAndChairs.ProductMediaFiles.Add(new() { MediaFileId = file.MediaFileId });
 
             _db.SaveChanges();
         }

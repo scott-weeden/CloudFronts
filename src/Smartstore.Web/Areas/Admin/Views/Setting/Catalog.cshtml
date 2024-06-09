@@ -417,8 +417,17 @@
                         <smart-label asp-for="ShowManufacturerLogoInLists" />
                     </div>
                     <div class="adminData">
-                        <setting-editor asp-for="ShowManufacturerLogoInLists"></setting-editor>
+                        <setting-editor asp-for="ShowManufacturerLogoInLists" data-toggler-for="#pnlManufacturerLogoInLists"></setting-editor>
                         <span asp-validation-for="ShowManufacturerLogoInLists"></span>
+                    </div>
+                </div>
+                <div id="pnlManufacturerLogoInLists" class="adminRow">
+                    <div class="adminTitle">
+                        <smart-label asp-for="LinkManufacturerLogoInLists" />
+                    </div>
+                    <div class="adminData">
+                        <setting-editor asp-for="LinkManufacturerLogoInLists"></setting-editor>
+                        <span asp-validation-for="LinkManufacturerLogoInLists"></span>
                     </div>
                 </div>
                 <div class="adminRow">
@@ -630,7 +639,64 @@
                         <span asp-validation-for="ShowLinkedAttributeValueImage"></span>
                     </div>
                 </div>
+                <div class="adminRow">
+                    <div class="adminTitle">
+                        <smart-label asp-for="ShowProductTags" />
+                    </div>
+                    <div class="adminData">
+                        <setting-editor asp-for="ShowProductTags"></setting-editor>
+                        <span asp-validation-for="ShowProductTags"></span>
+                    </div>
+                </div>
+
+                <div class="adminRow">
+                    <div class="admin-config-group">
+                        <div class="title mb-0">@T("Enums.ProductType.GroupedProduct")</div>
+                    </div>
+                </div>
+                <div class="adminRow text-muted">
+                    @T("Admin.Catalog.GroupedProductConfiguration.Note")
+                </div>
+                <div class="adminRow">
+                    <div class="adminTitle">
+                        <smart-label asp-for="AssociatedProductsPageSize" />
+                    </div>
+                    <div class="adminData">
+                        <setting-editor asp-for="AssociatedProductsPageSize"></setting-editor>
+                        <span asp-validation-for="AssociatedProductsPageSize"></span>
+                    </div>
+                </div>
+                <div class="adminRow">
+                    <div class="adminTitle">
+                        <smart-label asp-for="SearchMinAssociatedProductsCount" />
+                    </div>
+                    <div class="adminData">
+                        <setting-editor asp-for="SearchMinAssociatedProductsCount"></setting-editor>
+                        <span asp-validation-for="SearchMinAssociatedProductsCount"></span>
+                    </div>
+                </div>
+                <div class="adminRow">
+                    <div class="adminTitle">
+                        <smart-label asp-for="CollapsibleAssociatedProducts" />
+                    </div>
+                    <div class="adminData">
+                        <setting-editor asp-for="CollapsibleAssociatedProducts" data-toggler-for="#grouped-product-config-collapsible"></setting-editor>
+                        <span asp-validation-for="CollapsibleAssociatedProducts"></span>
+                    </div>
+                </div>
+                <div id="grouped-product-config-collapsible" class="adminRow">
+                    <div class="adminTitle">
+                        <smart-label asp-for="CollapsibleAssociatedProductsHeaders" />
+                    </div>
+                    <div class="adminData">
+                        <setting-editor asp-for="CollapsibleAssociatedProductsHeaders">
+                            <select asp-for="CollapsibleAssociatedProductsHeaders" asp-items="ViewBag.AssociatedProductsHeaderFields" multiple="multiple" data-tags="true"></select>
+                        </setting-editor>
+                        <span asp-validation-for="CollapsibleAssociatedProductsHeaders"></span>
+                    </div>
+                </div>
             </div>
+
         </tab>
         <tab sm-title="@T("Admin.Configuration.Settings.Catalog.UserSettings")">
             <div class="adminContent">
@@ -759,11 +825,11 @@
                 </div>
                 <div class="adminRow" id="pnlManufacturerItemsToDisplayInOffCanvas">
                     <div class="adminTitle">
-                        <smart-label asp-for="ManufacturerItemsToDisplayInOffCanvasMenu" />
+                        <smart-label asp-for="ManufacturerItemsToDisplayInOffcanvasMenu" />
                     </div>
                     <div class="adminData">
-                        <setting-editor asp-for="ManufacturerItemsToDisplayInOffCanvasMenu"></setting-editor>
-                        <span asp-validation-for="ManufacturerItemsToDisplayInOffCanvasMenu"></span>
+                        <setting-editor asp-for="ManufacturerItemsToDisplayInOffcanvasMenu"></setting-editor>
+                        <span asp-validation-for="ManufacturerItemsToDisplayInOffcanvasMenu"></span>
                     </div>
                 </div>
                 <div class="adminRow" id="pnlShowManufacturerPictures">

@@ -462,6 +462,7 @@
                     $el.data('entity-id') &&
                     assignableFileIds !== "" &&
                     assignableFiles.length > 0) {
+
                     $.ajax({
                         async: true,
                         cache: false,
@@ -505,7 +506,7 @@
                                     dzResetProgressBar(elPreview.find(".progress-bar"));
                                 }
                                 else {
-                                    console.log("Error while adding preview element.", value.Name.toLowerCase());
+                                    console.log(`Error while adding preview element '${value.Name.toLowerCase()}'.`);
                                 }
                             });
 
@@ -774,8 +775,9 @@
                         }
                     }
 
-                    if (fileIds !== "")
+                    if (fileIds !== "") {
                         assignFilesToEntity(filesToAssign, fileIds, false);
+                    }
                 }
             });
         });
@@ -930,8 +932,9 @@
     }
 
     // Sets the preview image of a single file upload control after upload or selection (by MM plugin).
-    function displaySingleFilePreview(file, fuContainer, options) {
+    window.displaySingleFilePreview = function (file, fuContainer, options) {
         var preview = Smartstore.media.getPreview(file, { iconCssClasses: "fa-4x" });
+
         fuContainer.find('.fu-thumb').removeClass("empty").html(preview.thumbHtml);
         Smartstore.media.lazyLoadThumbnails(fuContainer.find('.fu-thumb'));
 
@@ -1042,26 +1045,8 @@
         }
     }
 
-    function decodeMessage(str) {
-        if (str) {
-            try {
-                str = atob(str);
-            }
-            catch (e) { }
-
-            try {
-                return decodeURIComponent(escape(str));
-            }
-            catch (e) {
-                return str;
-            }
-        }
-
-        return str;
-    }
-
     var showNotification = _.throttle(function (msg, type) {
-        displayNotification(decodeMessage(msg), type);
+        displayNotification(base64Decode(msg), type);
     }, 750, { leading: true, trailing: true });
 
 })(jQuery);

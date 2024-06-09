@@ -1,7 +1,6 @@
 "use strict";
 
 (function ($, window, document, undefined) {
-
     var PayPalButton = window.PayPalButton = (function () {
         function PayPalButton(buttonContainerSelector, funding) {
             this.buttonContainer = $(buttonContainerSelector);
@@ -81,7 +80,7 @@
                 },
                 // Create order
                 createOrder: function (data, actions) {
-                    return createOrder(self.buttonContainer.data("create-order-url"), self.buttonContainer.attr("id"));
+                    return createOrder(self.buttonContainer.data("create-order-url"), self.buttonContainer.attr("id"), self.buttonContainer.data("route-ident"));
                 },
                 // Save obtained order id in checkout state.
                 onApprove: function (data, actions) {
@@ -92,10 +91,15 @@
                 },
                 onError: function (err) {
                     console.log(err);
+
+                    // Do not display error message if no order id was passed. It means that the cart may not be valid.
+                    if (error.message.indexOf('Expected an order id to be passed') >= 0)
+                        return;
+
                     displayNotification(err, 'error');
                 }
             })
-            .render(self.buttonContainer[0]);
+                .render(self.buttonContainer[0]);
         };
 
         return PayPalButton;
@@ -210,7 +214,7 @@
                             console.log(err);
                             displayNotification(err.message, 'error');
                         });
-                    
+
                     return false;
                 })
             });
@@ -219,17 +223,22 @@
         return PayPalHostedFieldsMethod;
     })();
 
-    function createOrder(createOrderUrl, paymentSource) {
+    function createOrder(createOrderUrl, paymentSource, routeIdent) {
         var orderId;
 
         $.ajax({
             async: false,   // IMPORTANT INFO: we must wait to get the order id.
             type: 'POST',
-            data: { paymentSource: paymentSource },
+            data: $('#startcheckout').closest('form').serialize() + "&paymentSource=" + paymentSource + "&routeIdent=" + routeIdent,
             url: createOrderUrl,
             cache: false,
-            success: function (resp) {
-                orderId = resp.id;
+            success: function (response) {
+                if (response.success) {
+                    orderId = response.data.id;
+                }
+                else {
+                    displayNotification(response.message, response.messageType);
+                }
             }
         });
 
@@ -240,7 +249,10 @@
         $.ajax({
             type: 'POST',
             url: container.data("init-transaction-url"),
-            data: $('#startcheckout').closest('form').serialize() + "&orderId=" + data.orderID,
+            data: {
+                orderId: data.orderID,
+                routeIdent: container.data("route-ident")
+            },
             cache: false,
             success: function (resp) {
                 if (resp.success) {

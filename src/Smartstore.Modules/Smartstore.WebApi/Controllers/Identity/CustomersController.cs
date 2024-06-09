@@ -9,6 +9,7 @@ namespace Smartstore.Web.Api.Controllers
     /// <summary>
     /// The endpoint for operations on Customer entity.
     /// </summary>
+    [WebApiGroup(WebApiGroupNames.Identity)]
     public class CustomersController : WebApiController<Customer>
     {
         private readonly Lazy<UserManager<Customer>> _userManager;
@@ -62,6 +63,17 @@ namespace Smartstore.Web.Api.Controllers
         public IQueryable<Order> GetOrders(int key)
         {
             return GetRelatedQuery(key, x => x.Orders);
+        }
+
+        /// <summary>
+        /// Gets WalletHistory entities assigned to a Customer.
+        /// </summary>
+        /// <remarks>Only applicable if a wallet plugin is installed.</remarks>
+        [HttpGet("Customers({key})/WalletHistory"), ApiQueryable]
+        [Permission("Wallet.read")]
+        public IQueryable<WalletHistory> GetWalletHistory(int key)
+        {
+            return GetRelatedQuery(key, x => x.WalletHistory);
         }
 
         [HttpGet("Customers({key})/ReturnRequests"), ApiQueryable]

@@ -39,11 +39,29 @@
                 </div>
                 <div class="adminRow">
                     <div class="adminTitle">
+                        <smart-label asp-for="AllowActivatableCartItems" />
+                    </div>
+                    <div class="adminData">
+                        <setting-editor asp-for="AllowActivatableCartItems"></setting-editor>
+                        <span asp-validation-for="AllowActivatableCartItems"></span>
+                    </div>
+                </div>
+                <div class="adminRow">
+                    <div class="adminTitle">
                         <smart-label asp-for="MaximumShoppingCartItems" />
                     </div>
                     <div class="adminData">
                         <setting-editor asp-for="MaximumShoppingCartItems"></setting-editor>
                         <span asp-validation-for="MaximumShoppingCartItems"></span>
+                    </div>
+                </div>
+                <div class="adminRow">
+                    <div class="adminTitle">
+                        <smart-label asp-for="AddProductsToBasketInSinglePositions" />
+                    </div>
+                    <div class="adminData">
+                        <setting-editor asp-for="AddProductsToBasketInSinglePositions"></setting-editor>
+                        <span asp-validation-for="AddProductsToBasketInSinglePositions"></span>
                     </div>
                 </div>
                 <div class="adminRow">
@@ -134,13 +152,24 @@
                         <span asp-validation-for="MiniShoppingCartEnabled"></span>
                     </div>
                 </div>
-                <div class="adminRow" id="pnlShowProductImagesInMiniShoppingCart">
-                    <div class="adminTitle">
-                        <smart-label asp-for="ShowProductImagesInMiniShoppingCart" />
+                <div id="pnlShowProductImagesInMiniShoppingCart">
+                    <div class="adminRow">
+                        <div class="adminTitle">
+                            <smart-label asp-for="ShowProductImagesInMiniShoppingCart" />
+                        </div>
+                        <div class="adminData">
+                            <setting-editor asp-for="ShowProductImagesInMiniShoppingCart"></setting-editor>
+                            <span asp-validation-for="ShowProductImagesInMiniShoppingCart"></span>
+                        </div>
                     </div>
-                    <div class="adminData">
-                        <setting-editor asp-for="ShowProductImagesInMiniShoppingCart"></setting-editor>
-                        <span asp-validation-for="ShowProductImagesInMiniShoppingCart"></span>
+                    <div class="adminRow">
+                        <div class="adminTitle">
+                            <smart-label asp-for="ShowEssentialAttributesInMiniShoppingCart" />
+                        </div>
+                        <div class="adminData">
+                            <setting-editor asp-for="ShowEssentialAttributesInMiniShoppingCart"></setting-editor>
+                            <span asp-validation-for="ShowEssentialAttributesInMiniShoppingCart"></span>
+                        </div>
                     </div>
                 </div>
 
@@ -180,6 +209,51 @@
             </div>
         </tab>
         <tab sm-title="@T("Admin.Configuration.Settings.ShoppingCart.Checkout")">
+            <div class="adminContent">
+                <div class="adminRow">
+                    <div class="adminTitle">
+                        <smart-label asp-for="CheckoutProcess" />
+                    </div>
+                    <div class="adminData">
+                        <setting-editor asp-for="CheckoutProcess">
+                            <select asp-for="CheckoutProcess">
+                                @foreach (var item in (List<ExtendedSelectListItem>)ViewBag.Checkouts)
+                                {
+                                    <option value="@item.Value" attr-selected='(item.Selected, "selected")' data-description="@(item.Get<string>("Description"))">@item.Text</option>
+                                }
+                            </select>
+                        </setting-editor>
+                        <span asp-validation-for="CheckoutProcess"></span>
+                    </div>
+                </div>
+                <div class="adminRow">
+                    <div class="adminTitle">
+                        <smart-label asp-for="QuickCheckoutEnabled" />
+                    </div>
+                    <div class="adminData">
+                        <setting-editor asp-for="QuickCheckoutEnabled" data-toggler-for=".quick-checkout-option"></setting-editor>
+                        <span asp-validation-for="QuickCheckoutEnabled"></span>
+                    </div>
+                </div>
+                <div class="adminRow quick-checkout-option">
+                    <div class="adminTitle">
+                        <smart-label asp-for="CustomersCanChangePreferredShipping" />
+                    </div>
+                    <div class="adminData">
+                        <setting-editor asp-for="CustomersCanChangePreferredShipping"></setting-editor>
+                        <span asp-validation-for="CustomersCanChangePreferredShipping"></span>
+                    </div>
+                </div>
+                <div class="adminRow quick-checkout-option">
+                    <div class="adminTitle">
+                        <smart-label asp-for="CustomersCanChangePreferredPayment" />
+                    </div>
+                    <div class="adminData">
+                        <setting-editor asp-for="CustomersCanChangePreferredPayment"></setting-editor>
+                        <span asp-validation-for="CustomersCanChangePreferredPayment"></span>
+                    </div>
+                </div>
+            </div>
             <div class="adminContent mb-3">
                 <div class="adminRow">
                     <div class="admin-config-group">
@@ -208,6 +282,15 @@
                 </div>
                 <div class="adminRow">
                     <div class="adminTitle">
+                        <smart-label asp-for="ShowSecondBuyButtonBelowCart" />
+                    </div>
+                    <div class="adminData">
+                        <setting-editor asp-for="ShowSecondBuyButtonBelowCart"></setting-editor>
+                        <span asp-validation-for="ShowSecondBuyButtonBelowCart"></span>
+                    </div>
+                </div>
+                <div class="adminRow">
+                    <div class="adminTitle">
                         <smart-label asp-for="ShowConfirmOrderLegalHint" />
                     </div>
                     <div class="adminData">
@@ -222,15 +305,6 @@
                     <div class="adminData">
                         <setting-editor asp-for="ShowEsdRevocationWaiverBox"></setting-editor>
                         <span asp-validation-for="ShowEsdRevocationWaiverBox"></span>
-                    </div>
-                </div>
-                <div class="adminRow">
-                    <div class="adminTitle">
-                        <smart-label asp-for="AddProductsToBasketInSinglePositions" />
-                    </div>
-                    <div class="adminData">
-                        <setting-editor asp-for="AddProductsToBasketInSinglePositions"></setting-editor>
-                        <span asp-validation-for="AddProductsToBasketInSinglePositions"></span>
                     </div>
                 </div>
                 <div class="adminRow">

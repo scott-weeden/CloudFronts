@@ -4,7 +4,7 @@
     var parentModel = ViewData["Parent"] as ProductModel;
 }
 
-<datagrid id="productvariantattributes-grid"
+<datagrid id="productvariantattributes-grid" version="2"
           allow-resize="true"
           allow-row-selection="true"
           allow-edit="true"
@@ -32,9 +32,9 @@
                 <span>@T("Common.Cancel")</span>
             </button>
         </toolbar-group>
-        <zone name="datagrid_toolbar_alpha"></zone>
+        <zone name="productvariantattribute_datagrid_toolbar_alpha"></zone>
         <toolbar-group class="omega"></toolbar-group>
-        <zone name="datagrid_toolbar_omega"></zone>
+        <zone name="productvariantattribute_datagrid_toolbar_omega"></zone>
         <toolbar-group>
             <button datagrid-action="DataGridToolAction.DeleteSelectedRows" type="button" class="btn btn-danger no-anims btn-flat">
                 <i class="far fa-trash-can"></i>
@@ -59,13 +59,11 @@
         <column for="DisplayOrder" entity-member="DisplayOrder" halign="center" />
         <column for="EditUrl" width="1fr" sortable="false">
             <display-template>
-                <a :href="item.row.EditUrl">
-                    {{ item.row.EditText }}
-                </a>
+                <a :href="item.row.EditUrl" v-html="item.row.EditLinkText"></a>
             </display-template>
             <edit-template>
                 <div v-if="item.row.OptionSets.length > 0" :id="'OptionsSetsContainer' + item.row.Id">
-                    <select class='form-control' :id="'OptionsSetsChoice' + item.row.Id" :data-valcount='item.row.ValueCount'>
+                    <select class='form-control' :id="'OptionsSetsChoice' + item.row.Id" :data-valcount='item.row.NumberOfOptions'>
                         <option v-for="o in item.row.OptionSets" v-bind:value="o.Id">{{ o.Name }}</option>
                     </select>
                 </div>

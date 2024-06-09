@@ -7,6 +7,7 @@ using Microsoft.AspNetCore.Mvc.Razor;
 using Microsoft.AspNetCore.Mvc.Rendering;
 using Microsoft.AspNetCore.Mvc.ViewFeatures;
 using Microsoft.AspNetCore.Razor.TagHelpers;
+using Smartstore.Core.Content.Blocks;
 using Smartstore.Core.Localization;
 using Smartstore.Utilities;
 using Smartstore.Web.Modelling;
@@ -19,7 +20,7 @@ namespace Smartstore.Web.Rendering
     public static class HtmlHelperRenderingExtensions
     {
         // Get the protected "HtmlHelper.GenerateEditor" method
-        private readonly static MethodInfo GenerateEditorMethod = typeof(HtmlHelper).GetMethod("GenerateEditor", BindingFlags.NonPublic | BindingFlags.Instance);
+        private readonly static MethodInvoker GenerateEditorMethodInvoker = typeof(HtmlHelper).GetMethod("GenerateEditor", BindingFlags.NonPublic | BindingFlags.Instance).CreateInvoker();
 
         #region EditorFor
 
@@ -67,13 +68,11 @@ namespace Smartstore.Web.Rendering
 
             if (helper is HtmlHelper htmlHelper)
             {
-                return (IHtmlContent)GenerateEditorMethod.Invoke(htmlHelper, new object[]
-                {
+                return (IHtmlContent)GenerateEditorMethodInvoker.Invoke(htmlHelper,
                     expression.ModelExplorer,
                     htmlFieldName ?? expression.Name,
                     templateName,
-                    additionalViewData
-                });
+                    additionalViewData);
             }
             else
             {
@@ -640,6 +639,16 @@ namespace Smartstore.Web.Rendering
                 var wrapper = new TagBuilder("div");
                 wrapper.Attributes.Add("class", "locale-editor");
                 wrapper.Attributes.Add("style", $"--tab-caption-display-{size}: inline");
+
+                // BEGIN: AI
+                if (helper.ViewData.Model is EntityModelBase { EntityId: > 0 } || (helper.ViewData.Model is ILocalizedModel && helper.ViewData.Model is IBlock))
+                {
+                    var aiToolHtmlGenerator = services.GetRequiredService<AIToolHtmlGenerator>();
+                    var translationDropdown = aiToolHtmlGenerator.GenerateTranslationTool(tabs.FirstOrDefault().Content.ToString());
+
+                    wrapper.InnerHtml.AppendHtml(translationDropdown);
+                }
+                // END: AI
 
                 return stripOutput.WrapElementWith(wrapper);
             }

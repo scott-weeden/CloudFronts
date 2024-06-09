@@ -110,27 +110,37 @@ Smartstore.Admin.Rules = (function () {
     });
 
     // Save rule set.
-    $(document).on('click', 'button[name="save"]', function (e) {
-        var strData = root.data('dirty')
+    $(document).on('click', 'button[name="save"], .save-rule-data', function () {
+        var rawRuleData = root.data('dirty')
             ? JSON.stringify(getRuleData())
             : '';
 
-        $('#RawRuleData').val(strData);
-        return true;
+        $('#RawRuleData').val(rawRuleData);
+
+        var event = jQuery.Event('saveRuleSetData');
+        event.save = true;
+        event.button = this;
+        event.rawRuleData = rawRuleData;
+
+        $(document).trigger(event);
+
+        return event.save;
     });
 
 
     // Add group.
     $(document).on('click', '.r-add-group', function (e) {
         var parentSet = $(this).closest('.ruleset');
-        var parentSetId = parentSet.data('ruleset-id');
-        var scope = parentSet.closest('.ruleset-root').data('scope');
 
         $.ajax({
             cache: false,
+            type: 'POST',
             url: root.data('url-addgroup'),
-            data: { ruleSetId: parentSetId, scope: scope },
-            type: "POST",
+            data: {
+                scope: root.data('scope'),
+                entityId: root.data('entity-id'),
+                ruleSetId: parentSet.data('ruleset-id')
+            },
             success: function (html) {
                 appendToRuleSetBody(parentSet, html);
                 parentSet.find('.ruleset:last select.r-add-rule').selectWrapper();
@@ -143,13 +153,16 @@ Smartstore.Admin.Rules = (function () {
     // Delete group.
     $(document).on('click', '.r-delete-group', function () {
         var parentSet = $(this).closest('.ruleset');
-        var refRuleId = parentSet.data('refrule-id');
 
         $.ajax({
             cache: false,
+            type: 'POST',
             url: root.data('url-deletegroup'),
-            data: { refRuleId: refRuleId },
-            type: "POST",
+            data: {
+                scope: root.data('scope'),
+                entityId: root.data('entity-id'),
+                ruleId: parentSet.data('refrule-id')
+            },
             success: function (result) {
                 if (result.Success) {
                     parentSet.remove();
@@ -167,15 +180,19 @@ Smartstore.Admin.Rules = (function () {
         e.preventDefault();
 
         var item = $(this);
-        var parentSetId = item.closest('.ruleset').data('ruleset-id');
         var operator = item.closest('.ruleset-operator');
         var op = item.data('value');
 
         $.ajax({
             cache: false,
-            url: operator.data('url'),
-            data: { ruleSetId: parentSetId, op: op },
             type: 'POST',
+            url: root.data('url-changeoperator'),
+            data: {
+                scope: root.data('scope'),
+                entityId: root.data('entity-id'),
+                ruleSetId: item.closest('.ruleset').data('ruleset-id'),
+                op
+            },
             success: function (result) {
                 if (result.Success) {
                     operator.find('input[name=LogicalOperator]').val(op);
@@ -212,12 +229,16 @@ Smartstore.Admin.Rules = (function () {
 
     // Save rules.
     $(document).on('click', 'button.ruleset-save', function () {
-        var data = getRuleData();
-        
+        var ruleData = getRuleData();
+
         $.ajax({
             cache: false,
             url: root.data('url-updaterules'),
-            data: { ruleData: data },
+            data: {
+                scope: root.data('scope'),
+                entityId: root.data('entity-id'),
+                ruleData
+            },
             type: 'POST',
             success: function (result) {
                 if (result.Success) {
@@ -240,14 +261,17 @@ Smartstore.Admin.Rules = (function () {
             return;
 
         var parentSet = select.closest('.ruleset');
-        var parentSetId = parentSet.data('ruleset-id');
-        var scope = parentSet.closest('.ruleset-root').data('scope');
 
         $.ajax({
             cache: false,
+            type: 'POST',
             url: root.data('url-addrule'),
-            data: { ruleSetId: parentSetId, scope: scope, ruleType: ruleType },
-            type: "POST",
+            data: {
+                scope: root.data('scope'),
+                entityId: root.data('entity-id'),
+                ruleSetId: parentSet.data('ruleset-id'),
+                ruleType
+            },
             success: function (html) {
                 appendToRuleSetBody(parentSet, html);
                 select.val('').trigger('change');
@@ -260,13 +284,16 @@ Smartstore.Admin.Rules = (function () {
     // Delete rule.
     $(document).on('click', '.r-delete-rule', function () {
         var rule = $(this).closest('.rule');
-        var ruleId = rule.data('rule-id');
 
         $.ajax({
             cache: false,
+            type: 'POST',
             url: root.data('url-deleterule'),
-            data: { ruleId: ruleId },
-            type: "POST",
+            data: {
+                scope: root.data('scope'),
+                entityId: root.data('entity-id'),
+                ruleId: rule.data('rule-id')
+            },
             success: function (result) {
                 if (result.Success) {
                     rule.remove();
@@ -281,13 +308,16 @@ Smartstore.Admin.Rules = (function () {
     // Execute rule.
     $(document).on('click', '#execute-rules', function () {
         var ruleSet = $(".ruleset-root > .ruleset")
-        var ruleSetId = ruleSet.data('ruleset-id');
 
         $.ajax({
             cache: false,
+            type: 'POST',
             url: $(this).attr('href'),
-            data: { ruleSetId: ruleSetId },
-            type: "POST",
+            data: {
+                scope: root.data('scope'),
+                entityId: root.data('entity-id'),
+                ruleSetId: ruleSet.data('ruleset-id')
+            },
             success: function (result) {
                 $('#excute-result')
                     .html(result.Message)

@@ -18,16 +18,28 @@ namespace Smartstore.Admin.Models.Catalog
 
         [LocalizedDisplay("*SearchShowOnProductPage")]
         public bool? SearchShowOnProductPage { get; set; }
+
+        [LocalizedDisplay("*SearchEssential")]
+        public bool? SearchEssential { get; set; }
     }
 
     [LocalizedDisplay("Admin.Catalog.Attributes.SpecificationAttributes.Fields.")]
     public class SpecificationAttributeModel : EntityModelBase, ILocalizedModel<SpecificationAttributeLocalizedModel>
     {
         [LocalizedDisplay("*Name")]
+        public string SearchName { get; set; }
+
+        [LocalizedDisplay("*Alias")]
+        public string SearchAlias { get; set; }
+
+        [LocalizedDisplay("*Name")]
         public string Name { get; set; }
 
         [LocalizedDisplay("*Alias")]
         public string Alias { get; set; }
+
+        [LocalizedDisplay("*Essential")]
+        public bool Essential { get; set; }
 
         [LocalizedDisplay("Common.DisplayOrder")]
         public int DisplayOrder { get; set; }
@@ -51,7 +63,10 @@ namespace Smartstore.Admin.Models.Catalog
         [LocalizedDisplay("*IndexOptionNames")]
         public bool IndexOptionNames { get; set; }
 
-        public List<SpecificationAttributeLocalizedModel> Locales { get; set; } = new();
+        [LocalizedDisplay("Admin.Catalog.Attributes.SpecificationAttributes.Options")]
+        public int NumberOfOptions { get; set; }
+
+        public List<SpecificationAttributeLocalizedModel> Locales { get; set; } = [];
 
         public string EditUrl { get; set; }
     }

@@ -1,5 +1,6 @@
 ﻿using Smartstore.Core.Data;
 using Smartstore.Core.Localization;
+using Smartstore.Core.Messaging;
 using Smartstore.Data.Hooks;
 using EState = Smartstore.Data.EntityState;
 
@@ -8,28 +9,36 @@ namespace Smartstore.Core.Identity
     [Important]
     internal class CustomerHook : AsyncDbSaveHook<Customer>
     {
-        private static readonly string[] _candidateProps = new[]
-        {
+        private static readonly string[] _candidateProps =
+        [
             nameof(Customer.Title),
             nameof(Customer.Salutation),
             nameof(Customer.FirstName),
             nameof(Customer.LastName)
-        };
+        ];
 
         private readonly SmartDbContext _db;
+        private readonly Lazy<IMessageFactory> _messageFactory;
+        private readonly CustomerSettings _customerSettings;
         private string _hookErrorMessage;
 
         // Key: old email. Value: new email.
         private readonly Dictionary<string, string> _modifiedEmails = new(StringComparer.OrdinalIgnoreCase);
+        private readonly HashSet<string> _emailsToUnsubscribe = new(StringComparer.OrdinalIgnoreCase);
 
-        public CustomerHook(SmartDbContext db)
+        public CustomerHook(
+            SmartDbContext db,
+            Lazy<IMessageFactory> messageFactory,
+            CustomerSettings customerSettings)
         {
             _db = db;
+            _messageFactory = messageFactory;
+            _customerSettings = customerSettings;
         }
 
         public Localizer T { get; set; } = NullLocalizer.Instance;
 
-        public override Task<HookResult> OnBeforeSaveAsync(IHookedEntity entry, CancellationToken cancelToken)
+        public override async Task<HookResult> OnBeforeSaveAsync(IHookedEntity entry, CancellationToken cancelToken)
         {
             if (entry.Entity is Customer customer)
             {
@@ -39,16 +48,22 @@ namespace Smartstore.Core.Identity
                     {
                         UpdateFullName(customer);
 
-                        if (entry.Entry.TryGetModifiedProperty(nameof(customer.Email), out var originalValue)
-                            && originalValue != null
+                        if (_customerSettings.UserRegistrationType == UserRegistrationType.AdminApproval
+                            && entry.Entry.TryGetModifiedProperty(nameof(customer.Active), out var prevValue)
+                            && !(bool)prevValue
+                            && customer.Active)
+                        {
+                            await _messageFactory.Value.SendCustomerWelcomeMessageAsync(customer, customer.GenericAttributes.LanguageId ?? 0);
+                        }
+
+                        if (entry.Entry.TryGetModifiedProperty(nameof(customer.Email), out var prevEmail)
+                            && prevEmail != null
                             && customer.Email != null)
                         {
-                            var oldEmail = originalValue.ToString();
                             var newEmail = customer.Email.EmptyNull().Trim().Truncate(255);
-
                             if (newEmail.IsEmail())
                             {
-                                _modifiedEmails[oldEmail] = newEmail;
+                                _modifiedEmails[prevEmail.ToString()] = newEmail;
                             }
                         }
                     }
@@ -59,7 +74,7 @@ namespace Smartstore.Core.Identity
                 }
             }
 
-            return Task.FromResult(HookResult.Ok);
+            return HookResult.Ok;
         }
 
         public override Task OnBeforeSaveCompletedAsync(IEnumerable<IHookedEntity> entries, CancellationToken cancelToken)
@@ -76,16 +91,23 @@ namespace Smartstore.Core.Identity
         }
 
         protected override Task<HookResult> OnUpdatedAsync(Customer entity, IHookedEntity entry, CancellationToken cancelToken)
-            => Task.FromResult(HookResult.Ok);
+        {
+            if (entry.IsSoftDeleted == true && entity.Email.HasValue())
+            {
+                _emailsToUnsubscribe.Add(entity.Email);
+            }
+
+            return Task.FromResult(HookResult.Ok);
+        }
 
         public override async Task OnAfterSaveCompletedAsync(IEnumerable<IHookedEntity> entries, CancellationToken cancelToken)
         {
-            // Update newsletter subscription if email changed.
-            if (_modifiedEmails.Any())
+            if (_modifiedEmails.Count > 0)
             {
+                // Update newsletter subscription if email changed.
                 var oldEmails = _modifiedEmails.Keys.ToArray();
 
-                foreach (var oldEmailsChunk in oldEmails.Chunk(50))
+                foreach (var oldEmailsChunk in oldEmails.Chunk(100))
                 {
                     var subscriptions = await _db.NewsletterSubscriptions
                         .Where(x => oldEmailsChunk.Contains(x.Email))
@@ -99,12 +121,21 @@ namespace Smartstore.Core.Identity
 
                 _modifiedEmails.Clear();
             }
+
+            // Unsubscribe from newsletter if customer was soft-deleted.
+            foreach (var chunk in _emailsToUnsubscribe.Chunk(50))
+            {
+                await _db.NewsletterSubscriptions
+                    .Where(x => chunk.Contains(x.Email))
+                    .ExecuteDeleteAsync(cancelToken);
+            }
+
+            _emailsToUnsubscribe.Clear();
         }
 
         private bool ValidateCustomer(Customer customer)
         {
             // INFO: do not validate email and username here. UserValidator is responsible for this.
-
             if (customer.Deleted && customer.IsSystemAccount)
             {
                 _hookErrorMessage = $"System customer account '{customer.SystemName}' cannot be deleted.";
@@ -126,7 +157,7 @@ namespace Smartstore.Core.Identity
             if (!shouldUpdate)
             {
                 var modProps = _db.GetModifiedProperties(entity);
-                shouldUpdate = _candidateProps.Any(x => modProps.ContainsKey(x));
+                shouldUpdate = _candidateProps.Any(modProps.ContainsKey);
             }
 
             if (shouldUpdate)
