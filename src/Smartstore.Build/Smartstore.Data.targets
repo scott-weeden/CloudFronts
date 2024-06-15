@@ -33,24 +33,24 @@
     (because they are not referenced). Therefore we check whether the compilation assembly 
     exists in the bin directory and if not, we build the provider projects manually.
     -->
-    <!--<Target Name="CompileSqlServerProvider" BeforeTargets="ComputeFilesToPublish" Condition="!Exists('$(BinDir)Smartstore.Data.SqlServer.dll')">
+    <Target Name="CompileSqlServerProvider" BeforeTargets="ComputeFilesToPublish" Condition="!Exists('$(BinDir)Smartstore.Data.SqlServer.dll')">
         <Message Importance="high" Text="Building SqlServer data provider..." />
         <Exec Command="dotnet build ..\Smartstore.Data\Smartstore.Data.SqlServer\Smartstore.Data.SqlServer.csproj -c $(Configuration)" />
     </Target>
     <Target Name="CompileMySqlProvider" BeforeTargets="ComputeFilesToPublish" Condition="!Exists('$(BinDir)Smartstore.Data.MySql.dll')">
         <Message Importance="high" Text="Building MySql data provider..." />
         <Exec Command="dotnet build ..\Smartstore.Data\Smartstore.Data.MySql\Smartstore.Data.MySql.csproj -c $(Configuration)" />
-    </Target>-->
-    <!--<Target Name="CompilePostgreSqlProvider" BeforeTargets="ComputeFilesToPublish" Condition="!Exists('$(BinDir)Smartstore.Data.PostgreSql.dll')">
+    </Target>
+    <Target Name="CompilePostgreSqlProvider" BeforeTargets="ComputeFilesToPublish" Condition="!Exists('$(BinDir)Smartstore.Data.PostgreSql.dll')">
         <Message Importance="high" Text="Building PostgreSql data provider..." />
         <Exec Command="dotnet build ..\Smartstore.Data\Smartstore.Data.PostgreSql\Smartstore.Data.PostgreSql.csproj -c $(Configuration)" />
-    </Target>-->
+    </Target>
 
     <!-- 
     Because data provider projects are not referenced, their output files are not copied to the publish directory.
     We gonna collect all output files here and announce them to the publisher.
     -->
-    <!--<Target Name="DeployDataProviders" AfterTargets="ComputeFilesToPublish">
+    <Target Name="DeployDataProviders" AfterTargets="ComputeFilesToPublish">
         <ItemGroup>
             <DistFiles Include="
             $(BinDir)Smartstore.Data.SqlServer.dll;
@@ -67,6 +67,6 @@
                 <ExcludeFromSingleFile>true</ExcludeFromSingleFile>
             </ResolvedFileToPublish>
         </ItemGroup>
-    </Target>-->
+    </Target>
 
 </Project>

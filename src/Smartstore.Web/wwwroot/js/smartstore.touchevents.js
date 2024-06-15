@@ -3,7 +3,7 @@
  * by Ben Major
  *
  * Copyright 2011-2017, Ben Major
- * Customized by Murat Cakir (SmartStore AG), 03/2017
+ * Customized by Murat Cakir (Web Sharp Studios, Inc), 03/2017
  * Licensed under the MIT License:
  * 
  * Permission is hereby granted, free of charge, to any person obtaining a copy

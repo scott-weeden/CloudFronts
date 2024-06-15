@@ -6,10 +6,10 @@
     <UseWindowsForms>true</UseWindowsForms>
     <ImplicitUsings>enable</ImplicitUsings>
     <Version>5.0.1.0</Version>
-    <Authors>Smartstore AG</Authors>
-    <Company>Smartstore AG</Company>
+    <Authors>Web Sharp Studios, Inc</Authors>
+    <Company>Web Sharp Studios, Inc</Company>
     <Product />
-    <Copyright>Copyright © Smartstore AG</Copyright>
+    <Copyright>Copyright © Web Sharp Studios, Inc</Copyright>
     <PackageProjectUrl>https://smartstore.com/</PackageProjectUrl>
     <RepositoryUrl>https://github.com/smartstore/Smartstore</RepositoryUrl>
     <RepositoryType>Git</RepositoryType>

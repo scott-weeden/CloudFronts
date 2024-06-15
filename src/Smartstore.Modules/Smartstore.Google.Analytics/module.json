@@ -1,6 +1,6 @@
 {
   "$schema": "../module.schema.json",
-  "Author": "SmartStore AG",
+  "Author": "Web Sharp Studios, Inc",
   "Group": "Analytics",
   "SystemName": "Smartstore.Google.Analytics",
   "FriendlyName": "Google Analytics",

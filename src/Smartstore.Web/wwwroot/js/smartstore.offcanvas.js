@@ -1,6 +1,6 @@
 ﻿/*
 *  Project: OffCanvas SideBar
-*  Author: Murat Cakir, SmartStore AG
+*  Author: Murat Cakir, Web Sharp Studios, Inc
 */
 
 ; (function ($, window, document, undefined) {

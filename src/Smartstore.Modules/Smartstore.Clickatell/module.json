@@ -1,6 +1,6 @@
 {
   "$schema": "../module.schema.json",
-  "Author": "SmartStore AG",
+  "Author": "Web Sharp Studios, Inc",
   "Group": "Mobile",
   "SystemName": "Smartstore.Clickatell",
   "FriendlyName": "Clickatell SMS Provider",

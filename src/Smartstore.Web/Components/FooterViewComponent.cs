@@ -107,7 +107,7 @@ namespace Smartstore.Web.Components
 
             if (_displayHelper.DisplaySmartstoreHint())
             {
-                model.SmartStoreHint = $"<a href='https://www.smartstore.com/' class='sm-hint' target='_blank'><strong>{hint}</strong></a> by SmartStore AG &copy; {DateTime.Now.Year}";
+                model.SmartStoreHint = $"<a href='https://www.smartstore.com/' class='sm-hint' target='_blank'><strong>{hint}</strong></a> by Web Sharp Studios, Inc &copy; {DateTime.Now.Year}";
             }
 
             if (ShouldRenderGDPR())

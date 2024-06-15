@@ -6,7 +6,7 @@
   "Description": "Enables login with X (Twitter) account.",
   "Version": "5.1.0",
   "MinAppVersion": "5.1.0",
-  "Author": "SmartStore AG",
+  "Author": "Web Sharp Studios, Inc",
   "Order": 1,
   "ResourceRootKey": "Plugins.ExternalAuth.Twitter",
   "PrivateReferences": [

@@ -6,7 +6,7 @@
   "Description": "Provides shipping methods for fixed rate shipping and computation based on total.",
   "Version": "5.1.0",
   "MinAppVersion": "5.1.0",
-  "Author": "SmartStore AG",
+  "Author": "Web Sharp Studios, Inc",
   "Order": 0,
   "ResourceRootKey": "Plugins.SmartStore.Shipping"
 }

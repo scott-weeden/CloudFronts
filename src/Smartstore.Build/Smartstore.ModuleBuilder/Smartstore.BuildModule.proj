@@ -1,9 +1,9 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
-    <TargetFramework>net5.0</TargetFramework>
-    <Copyright>Copyright © Smartstore AG</Copyright>
-    <Company>Smartstore AG</Company>
-    <Authors>Smartstore AG</Authors>
+    <TargetFramework>net8.0</TargetFramework>
+    <Copyright>Copyright © Web Sharp Studios, Inc</Copyright>
+    <Company>Web Sharp Studios, Inc</Company>
+    <Authors>Web Sharp Studios, Inc</Authors>
     <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
   </PropertyGroup> 
 

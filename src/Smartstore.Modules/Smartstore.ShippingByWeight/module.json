@@ -1,6 +1,6 @@
 {
   "$schema": "../module.schema.json",
-  "Author": "SmartStore AG",
+  "Author": "Web Sharp Studios, Inc",
   "Group": "Shipping",
   "SystemName": "Smartstore.ShippingByWeight",
   "FriendlyName": "Shipping by weight",

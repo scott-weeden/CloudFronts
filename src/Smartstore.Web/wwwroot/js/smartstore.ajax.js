@@ -1,6 +1,6 @@
 ﻿/*
 *  Project: Smartstore ajax wrapper
-*  Author: Marcus Gesing, SmartStore AG
+*  Author: Marcus Gesing, Web Sharp Studios, Inc
 */
 
 (function ($, window, document, undefined) {

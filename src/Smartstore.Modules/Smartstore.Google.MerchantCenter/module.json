@@ -1,6 +1,6 @@
 {
   "$schema": "../module.schema.json",
-  "Author": "SmartStore AG",
+  "Author": "Web Sharp Studios, Inc",
   "Group": "Marketing",
   "SystemName": "Smartstore.Google.MerchantCenter",
   "FriendlyName": "Google Merchant Center (GMC) feed",

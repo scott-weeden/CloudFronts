@@ -1,6 +1,6 @@
 ﻿/*
 *  Project: Parallax scrolling effect
-*  Author: Murat Cakir, SmartStore AG
+*  Author: Murat Cakir, Web Sharp Studios, Inc
 *  Date: 15.10.2018
 */
 
