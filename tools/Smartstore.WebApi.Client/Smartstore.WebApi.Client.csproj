@@ -1,17 +1,17 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
     <OutputType>WinExe</OutputType>
     <TargetFramework>net8.0-windows</TargetFramework>
     <UseWindowsForms>true</UseWindowsForms>
     <ImplicitUsings>enable</ImplicitUsings>
-    <Version>5.0.1.0</Version>
-    <Authors>Smartstore AG</Authors>
-    <Company>Smartstore AG</Company>
+    <Version>6.0.2.0</Version>
+    <Authors>Cloud Fronts LLC</Authors>
+    <Company>Cloud Fronts LLC</Company>
     <Product />
     <Copyright>Copyright © Smartstore AG</Copyright>
-    <PackageProjectUrl>https://smartstore.com/</PackageProjectUrl>
-    <RepositoryUrl>https://github.com/smartstore/Smartstore</RepositoryUrl>
+    <PackageProjectUrl>https://fronts.cloud/</PackageProjectUrl>
+    <RepositoryUrl>https://github.com/scott-weeden/Smartstore</RepositoryUrl>
     <RepositoryType>Git</RepositoryType>
     <ApplicationIcon>favicon.ico</ApplicationIcon>
   </PropertyGroup>
@@ -39,5 +39,4 @@
       <LastGenOutput>Settings.Designer.cs</LastGenOutput>
     </None>
   </ItemGroup>
-
 </Project>

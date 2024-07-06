@@ -1,5 +1,4 @@
-﻿using System.Collections.Immutable;
-using Autofac;
+using System.Collections.Immutable;
 using Smartstore.Caching;
 using Smartstore.Collections;
 using Smartstore.Core.Catalog.Attributes;
@@ -27,7 +26,7 @@ namespace Smartstore.Core.Catalog.Products
         private readonly IStoreContext _storeContext;
         private readonly IEventPublisher _eventPublisher;
         private readonly ICacheManager _cache;
-        private readonly IComponentContext _componentContext;
+        private readonly ICommonServices _services;
         private readonly Lazy<IProductTagService> _productTagService;
         private readonly IProductAttributeMaterializer _productAttributeMaterializer;
         private readonly IUrlService _urlService;
@@ -40,7 +39,7 @@ namespace Smartstore.Core.Catalog.Products
             IStoreContext storeContext,
             IEventPublisher eventPublisher,
             ICacheManager cache,
-            IComponentContext componentContext,
+            ICommonServices services,
             Lazy<IProductTagService> productTagService,
             IProductAttributeMaterializer productAttributeMaterializer,
             IUrlService urlService,
@@ -52,7 +51,7 @@ namespace Smartstore.Core.Catalog.Products
             _storeContext = storeContext;
             _eventPublisher = eventPublisher;
             _cache = cache;
-            _componentContext = componentContext;
+            _services = services;
             _productTagService = productTagService;
             _productAttributeMaterializer = productAttributeMaterializer;
             _urlService = urlService;
@@ -296,9 +295,7 @@ namespace Smartstore.Core.Catalog.Products
                     // SaveChanges is not necessary because SendQuantityBelowStoreOwnerNotificationAsync
                     // does not reload anything that has been changed in the meantime.
 
-                    if (decrease
-                        && result.StockQuantityOld != result.StockQuantityNew
-                        && product.NotifyAdminForQuantityBelow > result.StockQuantityNew)
+                    if (decrease && product.NotifyAdminForQuantityBelow > result.StockQuantityNew)
                     {
                         await _messageFactory.SendQuantityBelowStoreOwnerNotificationAsync(product, _localizationSettings.DefaultAdminLanguageId);
                     }
@@ -484,8 +481,7 @@ namespace Smartstore.Core.Catalog.Products
         {
             return new ProductBatchContext(
                 products,
-                _db,
-                _componentContext,
+                _services,
                 store ?? _storeContext.CurrentStore,
                 customer ?? _workContext.CurrentCustomer,
                 includeHidden,
@@ -595,7 +591,8 @@ namespace Smartstore.Core.Catalog.Products
             {
                 foreach (var product in productsWithMissingSlug)
                 {
-                    var validateSlugResult = await _urlService.SaveSlugAsync(product, null, product.Name, true);
+                    var validateSlugResult = await _urlService.ValidateSlugAsync(product, null, product.Name, true);
+                    await _urlService.ApplySlugAsync(validateSlugResult);
                 }
 
                 await _db.SaveChangesAsync(cancelToken);

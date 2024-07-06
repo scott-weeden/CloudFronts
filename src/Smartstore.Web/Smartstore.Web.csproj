@@ -1,4 +1,4 @@
-﻿<Project Sdk="Microsoft.NET.Sdk.Web">
+<Project Sdk="Microsoft.NET.Sdk.Web">
 
 	<Import Project="..\Smartstore.Build\Smartstore.Common.props" />
 	<Import Project="..\Smartstore.Build\Smartstore.Razor.props" />
@@ -7,7 +7,7 @@
 	<PropertyGroup>
 		<UserSecretsId>b35c0f56-dfa8-4120-b29b-a677578afcd1</UserSecretsId>
 		<CopyRefAssembliesToPublishDirectory>true</CopyRefAssembliesToPublishDirectory>
-		<RuntimeIdentifiers>win-x64; win-x86; linux-x64; osx-x64</RuntimeIdentifiers>
+		<RuntimeIdentifiers>win-x64; win-x86; linux-arm64; osx-arm64</RuntimeIdentifiers>
         <ProvideApplicationPartFactoryAttributeTypeName>Smartstore.Engine.Modularity.ApplicationParts.HostRazorAssemblyPartFactory, Smartstore</ProvideApplicationPartFactoryAttributeTypeName>
 		<!--<PublishReadyToRun>true</PublishReadyToRun>-->
 	</PropertyGroup>
@@ -18,8 +18,8 @@
 		<PackageReference Include="FluentValidation.AspNetCore" Version="11.3.0" />
 		<PackageReference Include="Microsoft.AspNetCore.Mvc.NewtonsoftJson" Version="8.0.4" />
 		<PackageReference Include="Microsoft.ClearScript.V8" Version="7.4.5" />
-		<PackageReference Include="Microsoft.ClearScript.V8.Native.linux-x64" Version="7.4.5" />
-		<PackageReference Include="Microsoft.ClearScript.V8.Native.osx-x64" Version="7.4.5" />
+		<PackageReference Include="Microsoft.ClearScript.V8.Native.linux-arm64" Version="7.4.5" />
+		<PackageReference Include="Microsoft.ClearScript.V8.Native.osx-arm64" Version="7.4.5" />
 		<PackageReference Include="Microsoft.ClearScript.V8.Native.win-x64" Version="7.4.5" />
 		<PackageReference Include="Microsoft.ClearScript.V8.Native.win-x86" Version="7.4.5" />
 		<PackageReference Include="Microsoft.Data.SqlClient" Version="5.2.0" />
