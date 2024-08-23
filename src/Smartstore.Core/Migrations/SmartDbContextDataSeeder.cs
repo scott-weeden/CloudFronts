@@ -1,4 +1,3 @@
-using Microsoft.EntityFrameworkCore;
 using Smartstore.Core.Configuration;
 using Smartstore.Data.Migrations;
 
@@ -272,7 +271,8 @@ namespace Smartstore.Core.Data.Migrations
                 "Checkout.TermsOfService.Read",
                 "Checkout.TermsOfService",
                 "Admin.Configuration.Settings.Order.TermsOfServiceEnabled",
-                "Admin.Configuration.Settings.Order.TermsOfServiceEnabled.Hint");
+                "Admin.Configuration.Settings.Order.TermsOfServiceEnabled.Hint",
+                "Admin.Orders.OrderItem.Update.Info");
             // ----- Quick checkout (end)
 
             builder.AddOrUpdate("Admin.Configuration.Settings.CustomerUser.MaxAvatarFileSize",
@@ -349,7 +349,7 @@ namespace Smartstore.Core.Data.Migrations
 
             builder.AddOrUpdate("Admin.Configuration.Settings.Catalog.AssociatedProductsPageSize",
                 "Page size of associated products list",
-                "Listengröße von verknüpften Produkten",
+                "Listengröße der verknüpften Produkten",
                 "Specifies the number of associated products per page for grouped products.",
                 "Legt die Anzahl verknüpfter Produkte pro Seite für Gruppenprodukte fest.");
 
@@ -374,6 +374,16 @@ namespace Smartstore.Core.Data.Migrations
             builder.AddOrUpdate("Admin.Catalog.GroupedProductConfiguration.Note",
                 "Settings for grouped products can be overwritten at product level.",
                 "Einstellungen für Gruppenprodukte können beim jeweiligen Produkt überschrieben werden.");
+
+            builder.AddOrUpdate("Admin.Catalog.GroupedProductConfiguration.SaveToContinue",
+                "To edit, please first save the product as a grouped product.",
+                "Zur Bearbeitung bitte zunächst das Produkt als Gruppenprodukt speichern.");
+
+            builder.AddOrUpdate("Admin.Catalog.Products.GroupedProductConfiguration.Title", 
+                "Title of associated products list", 
+                "Listentitel der verknüpften Produkte");
+
+            builder.AddOrUpdate("Admin.Catalog.Products.GroupedProductConfiguration", "Edit grouped product", "Gruppenprodukt bearbeiten");
             // ----- Revamp grouped products (end)
 
             builder.AddOrUpdate("Admin.Configuration.Settings.GeneralCommon.DisplayAdditionalLines",
@@ -390,6 +400,46 @@ namespace Smartstore.Core.Data.Migrations
             builder.AddOrUpdate("Admin.DataExchange.Export.FileNamePatternDescriptions",
                 "ID of export profil;Folder name of export profil;SEO name of export profil;Store ID;SEO name of store;One based file index;Random number;UTC timestamp;Date and time",
                 "ID des Exportprofils;Ordername des Exportprofils;SEO Name des Exportprofils;Shop ID;SEO Name des Shops;Mit 1 beginnender Dateiindex;Zufallszahl;UTC Zeitstempel;Datum und Uhrzeit");
+
+            builder.AddOrUpdate("Admin.Orders.List.GoDirectlyToNumber",
+                "Search by order number or order reference number",
+                "Nach Auftrags- oder Bestellreferenznummer suchen");
+
+            builder.AddOrUpdate("ShoppingCart.RequiredProductWarning",
+                "This product requires that the following product is also ordered: <a href=\"{1}\" class=\"alert-link\">{0}</a>.",
+                "Dieses Produkt erfordert, dass das folgende Produkt auch bestellt wird: <a href=\"{1}\" class=\"alert-link\">{0}</a>.");
+
+            builder.AddOrUpdate("Admin.Orders.Shipments.Carrier",
+                "Shipping is carried out by",
+                "Versand erfolgt über",
+                "Specifies the name of the carrier, e.g. DHL, Fedex, UPS or USPS.",
+                "Legt den Namen des Transportunternehmens fest, z.B. DHL, Hermes, DPD oder UPS.");
+
+            builder.AddOrUpdate("RewardPoints.Message.RewardPointsForProductReview",
+                "You will receive <strong>{0}</strong> reward points worth <strong>{1}</strong> for your rating.",
+                "Sie erhalten <strong>{0}</strong> Bonuspunkte im Wert von <strong>{1}</strong> für Ihre Bewertung.");
+
+            builder.AddOrUpdate("RewardPoints.Message.RewardPointsForProductPurchase",
+                "You will receive <strong>{0}</strong> reward points worth <strong>{1}</strong> for this purchase.",
+                "Sie erhalten <strong>{0}</strong> Bonuspunkte im Wert von <strong>{1}</strong> für diesen Einkauf.");
+
+            builder.AddOrUpdate("Admin.Configuration.Settings.RewardPoints.ShowPointsForProductReview",
+                "Show points for a product review",
+                "Punkte für eine Produkt-Rezension anzeigen",
+                "Specifies whether the reward points awarded for a product review, including the corresponding amount, should be displayed on the product detail page.",
+                "Legt fest, ob die für eine Produkt-Rezension gewährten Bonuspunkte samt dem entsprechenden Betrag auf der Produktdetailseite angezeigt werden sollen.");
+
+            builder.AddOrUpdate("Admin.Configuration.Settings.RewardPoints.ShowPointsForProductPurchase",
+                "Show points for the purchase of a product",
+                "Punkte für den Kauf eines Produktes anzeigen",
+                "Specifies whether the reward points awarded for purchasing a product, including the corresponding amount, should be displayed on the product detail page.",
+                "Legt fest, ob die für den Kauf eines Produktes gewährten Bonuspunkte samt dem entsprechenden Betrag auf der Produktdetailseite angezeigt werden sollen.");
+
+            builder.AddOrUpdate("Common.Old", "Old", "Alt");
+
+            builder.AddOrUpdate("Admin.System.Maintenance.CleanupOrphanedRecords",
+                "{0} orphaned data records of type {1} were deleted.",
+                "Es wurden {0} verwaiste Datensätze vom Typ {1} gelöscht.");
 
             AddAIResources(builder);
         }
@@ -411,11 +461,11 @@ namespace Smartstore.Core.Data.Migrations
             builder.AddOrUpdate("Admin.AI.TextCreation.Summarize", "Summarize", "Zusammenfassen");
             builder.AddOrUpdate("Admin.AI.TextCreation.Improve", "Improve", "Schreibstil verbessern");
             builder.AddOrUpdate("Admin.AI.TextCreation.Simplify", "Simplify", "Vereinfachen");
-            builder.AddOrUpdate("Admin.AI.TextCreation.Extend", "Extend", "Ausführlicher schreiben");
+            builder.AddOrUpdate("Admin.AI.TextCreation.Extend", "Extend", "Ausführlicher");
 
-            builder.AddOrUpdate("Admin.AI.TextCreation.DefaultPrompt", "Create text on the topic: '{0}'", "Erzeuge Text zum Thema: '{0}'.");
-            builder.AddOrUpdate("Admin.AI.ImageCreation.DefaultPrompt", "Create a picture on the topic: '{0}'", "Erzeuge ein Bild zum Thema: '{0}'.");
-            builder.AddOrUpdate("Admin.AI.Suggestions.DefaultPrompt", "Make suggestions on the topic: '{0}'", "Mache Vorschläge zum Thema '{0}'.");
+            builder.AddOrUpdate("Admin.AI.TextCreation.DefaultPrompt", "Generate text about the topic '{0}'.", "Erzeuge Text zum Thema '{0}'.");
+            builder.AddOrUpdate("Admin.AI.ImageCreation.DefaultPrompt", "Generate a picture about the topic: '{0}'.", "Erzeuge ein Bild zum Thema: '{0}'.");
+            builder.AddOrUpdate("Admin.AI.Suggestions.DefaultPrompt", "Make suggestions about the topic: '{0}'.", "Mache Vorschläge zum Thema '{0}'.");
 
             builder.AddOrUpdate("Admin.AI.MenuItemTitle.ChangeStyle", "Change style", "Sprachstil ändern");
             builder.AddOrUpdate("Admin.AI.MenuItemTitle.ChangeTone", "Change tone", "Ton ändern");
@@ -438,14 +488,14 @@ namespace Smartstore.Core.Data.Migrations
                 "The text may contain a maximum of {0} words.",
                 "Der Text darf maximal {0} Wörter enthalten.");
             builder.AddOrUpdate("Smartstore.AI.Prompts.SeparateListWithComma",
-                "The list should be comma-separated so that it can be inserted directly as a meta tag.",
+                "The list should be comma separated so that it can be inserted directly as a meta tag.",
                 "Die Liste soll kommagetrennt sein, so dass sie direkt als META-tag eingefügt werden kann.");
             builder.AddOrUpdate("Smartstore.AI.Prompts.ReserveSpaceForShopName",
                 "Do not use the name of the website as this will be added later. Reserve 5 words for this.",
                 "Verwende dabei nicht den Namen der Website, da dieser später hinzugefügt wird. Reserviere dafür 5 Wörter.");
             builder.AddOrUpdate("Smartstore.AI.Prompts.CreatePicture",
-                "Create an image for the topic: '{0}'.",
-                "Erstelle ein Bild zum Thema: '{0}'.");
+                "Generate an image for the topic '{0}'.",
+                "Generiere ein Bild zum Thema '{0}'.");
             builder.AddOrUpdate("Smartstore.AI.Prompts.AddCallToAction",
                 "Finally, insert a link with the text '{0}' that refers to '{1}'. The link is given the CSS classes 'btn btn-primary'",
                 "Füge abschließend einen Link mit dem Text '{0}' ein, der auf '{1}' verweist. Der Link erhält die CSS-Klassen 'btn btn-primary'");
@@ -457,15 +507,15 @@ namespace Smartstore.Core.Data.Migrations
                 "Füge einen Link mit dem Text '{0}' ein, der auf '{1}' verweist.");
             builder.AddOrUpdate("Smartstore.AI.Prompts.AddToc",
                 "Insert a table of contents with the title '{0}'." +
-                " The title receives a {1} tag." +
+                " The title is given a {1} tag." +
                 " Link the individual points of the table of contents to the respective headings of the paragraphs.",
                 "Füge ein Inhaltsverzeichnis mit dem Titel '{0}' ein." +
                 " Der Titel erhält ein {1}-Tag." +
                 " Verlinke die einzelnen Punkte des Inhaltsverzeichnisses mit den jeweiligen Überschriften der Absätze.");
             builder.AddOrUpdate("Smartstore.AI.Prompts.IncludeImages",
-                "After each paragraph, add another p-tag with the style specification 'width:450px', which contains an i-tag with the classes 'far fa-xl fa-file-image ai-preview-file'." +
+                "After each paragraph, add another p-tag with the style specification 'width:450px', which contains an i-tag with the CSS classes 'far fa-xl fa-file-image ai-preview-file'." +
                 " The title attribute of the i-tag should be the heading of the respective paragraph.",
-                "Füge nach jedem Absatz ein weiteres p-Tag mit der style-Angabe 'width:450px' ein, das ein i-Tag mit den Klassen 'far fa-xl fa-file-image ai-preview-file' enthält." +
+                "Füge nach jedem Absatz ein weiteres p-Tag mit der style-Angabe 'width:450px' ein, das ein i-Tag mit den CSS-Klassen 'far fa-xl fa-file-image ai-preview-file' enthält." +
                 " Das title-Attribut des i-Tags soll die Überschrift des jeweiligen Absatzes sein.");
             builder.AddOrUpdate("Smartstore.AI.Prompts.NoIntroImage",
                 "The intro does not receive a picture.",
@@ -495,7 +545,7 @@ namespace Smartstore.Core.Data.Migrations
                 "Each section should contain a maximum of {0} words.",
                 "Jeder Abschnitt soll maximal {0} Wörter enthalten.");
             builder.AddOrUpdate("Smartstore.AI.Prompts.ParagraphCount",
-                "The text should be divided into {0} paragraphs, which are enclosed in p tags.",
+                "The text should be divided into {0} paragraphs enclosed in p tags.",
                 "Der Text ist in {0} Abschnitte zu gliedern, die von p-Tags umschlossen sind.");
             builder.AddOrUpdate("Smartstore.AI.Prompts.MainHeadingTag",
                 "The main heading is given a {0} tag.",
@@ -548,15 +598,11 @@ namespace Smartstore.Core.Data.Migrations
                 "Be a professional journalist.",
                 "Sei ein professioneller Journalist.");
             builder.AddOrUpdate("Smartstore.AI.Prompts.Role.SalesPerson",
-                "Be a assistant that creates product descriptions that convince a potential customer to make a purchase.",
-                "Sei ein Assistent, der Produktbeschreibungen erstellt, die einen potentiellen Kunden von einem Kauf überzeugen.");
+                "Be an assistant who creates product descriptions that convince a potential customer to buy.",
+                "Sei ein Assistent bei der Erstellung von Produktbeschreibungen, die einen potentiellen Kunden zum Kauf überzeugen.");
             builder.AddOrUpdate("Smartstore.AI.Prompts.Role.ProductExpert",
                 "Be an expert for the product: '{0}'.",
                 "Sei ein Experte für das Produkt: '{0}'.");
-
-            builder.AddOrUpdate("Admin.Orders.List.GoDirectlyToNumber",
-                "Search by order number or order reference number",
-                "Nach Auftrags- oder Bestellreferenznummer suchen");
         }
     }
 }

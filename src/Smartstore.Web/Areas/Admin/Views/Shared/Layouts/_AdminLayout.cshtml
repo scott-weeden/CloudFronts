@@ -1,5 +1,4 @@
 ﻿@* Please keep in mind that this layout view is also referenced and used by modules! *@
-@using Smartstore.Core.Logging;
 
 @{
     Layout = "_AdminRoot";
@@ -7,14 +6,21 @@
 
 @if (ViewBag.RefreshPage == true)
 {
+    var btnId = (string)ViewBag.btnId;
     <script>
-		try {
-			window.parent.document.forms['@(ViewBag.formId)'].@(ViewBag.btnId).click();
-		}
-		catch (e) {
-			try { window.parent.document.getElementById('@(ViewBag.btnId)').click(); }
-			catch (e2) { }
-		}
+        @if (btnId.HasValue())
+        {<text>
+            try {
+                window.parent.document.forms['@(ViewBag.formId)'].@(btnId).click();
+            }
+            catch (e) {
+                try {
+                    window.parent.document.getElementById('@(btnId)').click();
+                }
+                catch (e2) {
+                }
+            }
+        </text>}
 
 		@if (!(ViewBag.CloseWindow == false))
 		{
@@ -29,7 +35,8 @@
 }
 
 <div id="page">
-    <div class="page-main">
+    <div class="canvas-blocker canvas-slidable"></div>
+    <div class="page-main canvas-slidable">
         <header id="header">
             <zone name="header" replace-content="true">
                 <zone name="admin_navbar_before" preview-class="position-absolute"></zone>
