@@ -8,7 +8,7 @@
 *.sln.ide/
 .vs/
 #.vscode/
-
+.build/
 # Secrets
 *.secrets
 

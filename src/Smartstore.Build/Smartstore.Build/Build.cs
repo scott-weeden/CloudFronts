@@ -70,7 +70,7 @@ class Build : NukeBuild
 
             DotNetClean(s => s
                 .SetProject(Solution)
-                .SetVerbosity(DotNetVerbosity.Minimal));
+                .SetVerbosity(DotNetVerbosity.minimal));
 
             EnsureCleanDirectory(SourceDirectory / "Smartstore.Web/Modules");
         });
@@ -89,7 +89,7 @@ class Build : NukeBuild
             DotNetBuild(s => s
                 .SetProjectFile(Solution)
                 .SetConfiguration(Configuration)
-                .SetVerbosity(DotNetVerbosity.Minimal)
+                .SetVerbosity(DotNetVerbosity.minimal)
                 //.SetAssemblyVersion(GitVersion.AssemblySemVer)
                 //.SetFileVersion(GitVersion.AssemblySemFileVer)
                 //.SetInformationalVersion(GitVersion.InformationalVersion)
