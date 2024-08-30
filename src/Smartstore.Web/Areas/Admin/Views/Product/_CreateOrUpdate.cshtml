@@ -45,7 +45,7 @@
     @if (Model.ProductTypeId != (int)ProductType.GroupedProduct)
     {
         <tab sm-title="@T("Admin.Catalog.Products.Price")"
-             sm-icon="bi:currency-euro"
+             sm-icon="bi:currency-usd"
              sm-ajax="true"
              href="@Url.Action("LoadEditTab", "Product", new { id = Model.Id, tabName = "Price" })"
              sm-name="Price">
