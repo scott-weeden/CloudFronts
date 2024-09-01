@@ -1,6 +1,6 @@
 <p align="center">
-	<a href="https://www.smartstore.com" target="_blank" rel="noopener noreferrer">
-		<img src="assets/smartstore-icon-whitebg.png" alt="Smartstore" width="120">
+	<a href="https://fronts.cloud" target="_blank" rel="noopener noreferrer">
+		<img src="assets/smartstore-icon-whitebg.png" alt="Cloud Fronts" width="120">
 	</a>
 </p>
 
@@ -13,16 +13,16 @@
 </p>
 <p align="center">
 	<a href="#try-it-online">Try Online</a> ∙ 
-	<a href="http://community.smartstore.com">Forum</a> ∙ 
-	<a href="http://community.smartstore.com/marketplace">Marketplace</a> ∙ 
-	<a href="http://translate.smartstore.com/">Translations</a>
+	<a href="http://community.fronts.cloud">Forum</a> ∙ 
+	<a href="http://community.fronts.cloud/marketplace">Marketplace</a> ∙ 
+	<a href="http://translate.fronts.cloud/">Translations</a>
 </p>
 <br/>
 <p align="center">
-  <img src="assets/sm5-devices.png" alt="Smartstore Demoshop" />
+  <img src="assets/sm5-devices.png" alt="Cloud Fronts Demo Store" />
 </p>
 
-Smartstore is a cross-platform, modular, scalable and ultra-fast open source all-in-one eCommerce platform based on ASP.NET Core 7, Entity Framework, Vue.js, Sass, Bootstrap and more.
+Cloud Fronts is a cross-platform, modular, scalable and ultra-fast open source all-in-one eCommerce platform based on ASP.NET Core 8, Entity Framework, Vue.js, Sass, Bootstrap and more.
 
 **Smartstore includes all the essential features to create multi-language, multi-store, multi-currency shops** targeting desktop or mobile devices and enables SEO-optimised, rich product catalogs with support for unlimited number of products and categories, variants, bundles, datasheets, ESD, discounts, coupons and much more.
 
@@ -32,12 +32,12 @@ A comprehensive set of tools for CRM & CMS, Sales, Marketing, Payment & Shipping
 
 The state-of-the-art architecture of Smartstore - with `ASP.NET Core 7`, `Entity Framework Core 7` and Domain Driven Design approach - makes it easy to extend, extremely flexible and basically fun to work with ;-)
 
-* :house: **Website:** [http://www.smartstore.com](http://www.smartstore.com)
-* :speech_balloon: **Forum:** [http://community.smartstore.com](http://community.smartstore.com)
-* :mega: **Marketplace:** [http://community.smartstore.com/marketplace](http://community.smartstore.com/marketplace)
-* :earth_americas: **Translations:** [http://translate.smartstore.com/](http://translate.smartstore.com/)
-* :blue_book: **Documentation:** [Smartstore Documentation in English](https://smartstore.atlassian.net/wiki/spaces/SMNET50/pages/1956118583/Getting+Started)
-* ▶️ **Azure Marketplace:** [https://azuremarketplace.microsoft.com](https://azuremarketplace.microsoft.com/marketplace/apps/smartstore-ag.smartstorenet?tab=Overview)
+* :house: **Website:** [http://fronts.cloud](http://fronts.cloud)
+* :speech_balloon: **Forum:** [http://community.fronts.cloud](http://community.smartstore.com)
+* :mega: **Marketplace:** [http://community.fronts.cloud/marketplace](http://community.smartstore.com/marketplace)
+* :earth_americas: **Translations:** [http://translate.fronts.cloud/](http://translate.smartstore.com/)
+* :blue_book: **Documentation:** [Cloud Fronts Documentation in English](https://cloudfronts.atlassian.net/wiki/spaces/SMNET50/pages/1956118583/Getting+Started)
+* ▶️ **Azure Marketplace:** [https://azuremarketplace.microsoft.com](https://azuremarketplace.microsoft.com/marketplace/apps/cloudfronts-ag.cloudfrontnet?tab=Overview)
 <p>&nbsp;</p>
 
 ## Technology & Design
@@ -111,11 +111,9 @@ The state-of-the-art architecture of Smartstore - with `ASP.NET Core 7`, `Entity
 - PostgreSQL 11+
 - SQLite 3.31+
 
-### Upgrade from Smartstore.NET 4.2
+### Upgrade from Smartstore
 
-Smartstore 5 is a port of [Smartstore.NET 4](https://github.com/smartstore/SmartStoreNET) - based on the classic .NET Framework 4.7.2 – to the new `ASP.NET Core 7` platform. Smartstore instances based on classic `ASP.NET MVC` can be upgraded seamlessly. To [upgrade](https://smartstore.atlassian.net/wiki/spaces/SMNET50/pages/1956118609/Updating+from+Previous+Versions), all you need to do is replace the application files on your server - except for the `App_Data` directory - and **all your data will automatically be transferred to the new system**. [See the documentation for detailed information on installing or upgrading your store](https://smartstore.atlassian.net/wiki/spaces/SMNET50/pages/1956118822/Installing+Smartstore).
-
- :information_source: Upgrading from versions older than 4.2 is not possible. Therefore, you should migrate Smartstore.NET to version 4.2 first and then upgrade to Smartstore 5.
+Cloud Fronts 5.1.1 is a port of [Smartstore 5.1](https://github.com/smartstore/SmartStore) - based on Dotnet-Core 7 – to the new `ASP.NET Core 8` platform.
 
 ### Visual Studio
 
@@ -126,7 +124,7 @@ Smartstore 5 is a port of [Smartstore.NET 4](https://github.com/smartstore/Smart
 
 ### Repository Structure
 
-- [`Smartstore`](https://github.com/smartstore/Smartstore/tree/main/src/Smartstore) contains common low-level application-agnostic stuff like bootstrapper, modularity engine, caching, pub/sub, imaging, type conversion, IO, templating, scheduling, various utilities, common extension methods etc.
+- [`CloudFront Store`](https://github.com/scott-weeden/CloudFronts/tree/main/src/CloudFronts) contains common low-level application-agnostic stuff like bootstrapper, modularity engine, caching, pub/sub, imaging, type conversion, IO, templating, scheduling, various utilities, common extension methods etc.
 - [`Smartstore.Data`](https://github.com/smartstore/Smartstore/tree/main/src/Smartstore.Data) contains database providers
 - [`Smartstore.Core`](https://github.com/smartstore/Smartstore/tree/main/src/Smartstore.Core) contains application specific modules like catalog, checkout, identity, security, localization, logging, messaging, rules engine, search engine, theme engine, migrations etc.
 - [`Smartstore.Web.Common`](https://github.com/smartstore/Smartstore/tree/main/src/Smartstore.Web.Common) contains common web features like custom MVC infrastructure, bundling, TagHelpers, HtmlHelpers etc.
@@ -190,12 +188,12 @@ Creates a composite Docker container containing the **smartstore** application i
 
 We have set up a live online demo for you to test Smartstore without a local installation. Get a first impression and test all available features in the frontend and backend. Please note that the backend demo is shared and other testers can modify data at the same time.
 
-* [**Frontend**](https://core.smartstore.com/frontend/en) (User: demo, PWD: 1234)
-* [**Backend**](https://core.smartstore.com/backend/admin/) (User: demo, PWD: 1234)
+* [**Frontend**](https://core.fronts.cloud/frontend/en) (User: demo, PWD: 1234)
+* [**Backend**](https://core.fronts.cloud/backend/admin/) (User: demo, PWD: 1234)
 <p>&nbsp;</p>
 
 ## License
 
-Smartstore Community Edition is released under the [AGPL license](https://www.gnu.org/licenses/agpl-3.0.de.html).
+Cloud Fronts is released under the [AGPL license](https://www.gnu.org/licenses/agpl-3.0.en.html#license-text).
 
 **Add a star to our new repository** to stay up-to-date, get involved or just watch how we're doing. Learn about the latest developments, actively participate and don't miss out on new releases.
