@@ -113,11 +113,11 @@ The state-of-the-art architecture of Smartstore - with `ASP.NET Core 7`, `Entity
 
 ### Upgrade from Smartstore
 
-Cloud Fronts 5.1.1 is a port of [Smartstore 5.1](https://github.com/smartstore/SmartStore) - based on Dotnet-Core 7 – to the new `ASP.NET Core 8` platform.
+Cloud Fronts 5.1.1 is a port of [Smartstore 5.1](https://github.com/scott-weeden/CloudFronts) - based on Dotnet-Core 7 – to the new `ASP.NET Core 8` platform.
 
 ### Visual Studio
 
-- Clone the repository using the command `git clone https://github.com/smartstore/Smartstore.git` and checkout the `main` branch.
+- Clone the repository using the command `git clone https://github.com/scott-weeden/CloudFronts.git` and checkout the `main` branch.
 - Download Visual Studio 2022 (any edition) from https://www.visualstudio.com/downloads/
 - Open `Smartstore.sln` and wait for Visual Studio to restore all NuGet packages
 - Make sure `Smartstore.Web` is the startup project and run it
@@ -125,11 +125,11 @@ Cloud Fronts 5.1.1 is a port of [Smartstore 5.1](https://github.com/smartstore/S
 ### Repository Structure
 
 - [`CloudFront Store`](https://github.com/scott-weeden/CloudFronts/tree/main/src/CloudFronts) contains common low-level application-agnostic stuff like bootstrapper, modularity engine, caching, pub/sub, imaging, type conversion, IO, templating, scheduling, various utilities, common extension methods etc.
-- [`Smartstore.Data`](https://github.com/smartstore/Smartstore/tree/main/src/Smartstore.Data) contains database providers
-- [`Smartstore.Core`](https://github.com/smartstore/Smartstore/tree/main/src/Smartstore.Core) contains application specific modules like catalog, checkout, identity, security, localization, logging, messaging, rules engine, search engine, theme engine, migrations etc.
-- [`Smartstore.Web.Common`](https://github.com/smartstore/Smartstore/tree/main/src/Smartstore.Web.Common) contains common web features like custom MVC infrastructure, bundling, TagHelpers, HtmlHelpers etc.
-- [`Smartstore.Modules`](https://github.com/smartstore/Smartstore/tree/main/src/Smartstore.Modules) contains all module/plugin projects
-- [`Smartstore.Web`](https://github.com/smartstore/Smartstore/tree/main/src/Smartstore.Web) is the entry host project that contains controllers, model classes, themes, static assets etc.
+- [`Smartstore.Data`](https://github.com/scott-weeden/CloudFronts/tree/main/src/Smartstore.Data) contains database providers
+- [`Smartstore.Core`](https://github.com/scott-weeden/CloudFronts/tree/main/src/Smartstore.Core) contains application specific modules like catalog, checkout, identity, security, localization, logging, messaging, rules engine, search engine, theme engine, migrations etc.
+- [`Smartstore.Web.Common`](https://github.com/scott-weeden/CloudFronts/tree/main/src/Smartstore.Web.Common) contains common web features like custom MVC infrastructure, bundling, TagHelpers, HtmlHelpers etc.
+- [`Smartstore.Modules`](https://github.com/scott-weeden/CloudFronts/tree/main/src/Smartstore.Modules) contains all module/plugin projects
+- [`Smartstore.Web`](https://github.com/scott-weeden/CloudFronts/tree/main/src/Smartstore.Web) is the entry host project that contains controllers, model classes, themes, static assets etc.
 
 <p>&nbsp;</p>
 
